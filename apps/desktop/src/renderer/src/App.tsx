@@ -5,6 +5,13 @@ import { Dashboard } from './components/Dashboard.js';
 import { ChatList } from './components/ChatList.js';
 import { MessageThread } from './components/MessageThread.js';
 import { AddAccountModal } from './components/AddAccountModal.js';
+import { ConnectModal } from './components/ConnectModal.js';
+
+interface ConnState {
+  status: string;
+  qr?: string;
+  lastError?: string | null;
+}
 
 type Tab = 'live' | 'archive' | 'deleted';
 type View = string | null | 'ALL';
@@ -20,6 +27,8 @@ export function App() {
   const [results, setResults] = useState<SearchHitDTO[]>([]);
   const [modal, setModal] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [connStates, setConnStates] = useState<Record<string, ConnState>>({});
+  const [connectingId, setConnectingId] = useState<string | null>(null);
 
   const refreshAccounts = useCallback(async () => {
     setAccounts(await window.wa.accounts.list());
@@ -27,6 +36,20 @@ export function App() {
 
   useEffect(() => {
     void refreshAccounts();
+  }, [refreshAccounts]);
+
+  // Persistent subscription for connection state (QR + status) across accounts.
+  useEffect(() => {
+    const off = window.wa.onEvent((event, payload) => {
+      if (event !== 'account.connection') return;
+      const p = payload as ConnState & { accountId: string };
+      setConnStates((prev) => ({
+        ...prev,
+        [p.accountId]: { status: p.status, qr: p.qr, lastError: p.lastError },
+      }));
+      if (p.status === 'CONNECTED' || p.status === 'LOGGED_OUT') void refreshAccounts();
+    });
+    return off;
   }, [refreshAccounts]);
 
   const accountId = typeof view === 'string' && view !== 'ALL' ? view : null;
@@ -93,7 +116,9 @@ export function App() {
       const acc = await window.wa.accounts.create(input);
       await refreshAccounts();
       setModal(false);
-      setView(acc.id);
+      // Real accounts need the linked-device QR flow; mock accounts connect instantly.
+      if (acc.connectionStatus !== 'CONNECTED') setConnectingId(acc.id);
+      else setView(acc.id);
     } finally {
       setBusy(false);
     }
@@ -193,6 +218,21 @@ export function App() {
 
       {modal && (
         <AddAccountModal onCancel={() => setModal(false)} onCreate={createAccount} busy={busy} />
+      )}
+
+      {connectingId && (
+        <ConnectModal
+          accountName={accounts.find((a) => a.id === connectingId)?.displayName ?? 'account'}
+          state={connStates[connectingId]}
+          onClose={() => {
+            const id = connectingId;
+            const st = connStates[id]?.status;
+            // If they never linked, stop the socket so it doesn't keep reconnecting.
+            if (st !== 'CONNECTED') void window.wa.accounts.disconnect(id);
+            setConnectingId(null);
+            void refreshAccounts();
+          }}
+        />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { AppServices, mockAdapterFactory } from '@wa-archive/app-core';
+import { AppServices, makeBaileysFactory, mockAdapterFactory } from '@wa-archive/app-core';
 import { createArchiveServer } from './http-server.js';
 
 /**
@@ -17,17 +17,24 @@ const webRoot = join(repoRoot, 'apps', 'desktop', 'out', 'web');
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
+// WA_REAL=1 uses Baileys (real linked-device); otherwise the mock adapter.
+const REAL = process.env.WA_REAL === '1';
 
-const services = new AppServices(mockAdapterFactory);
+const factory = REAL ? makeBaileysFactory(join(dataDir, 'auth')) : mockAdapterFactory;
+const services = new AppServices(factory);
 services.init(join(dataDir, 'archive.sqlite'), migrationsFolder);
 
-// Seed default accounts on first run so the demo has data (spec §96).
 async function seed(): Promise<void> {
-  if (services.repos.accounts.list().length > 0) {
-    // Reconnect existing accounts for live updates.
-    for (const a of services.repos.accounts.list()) await services.connectAccount(a.id);
+  const existing = services.repos.accounts.list();
+  if (existing.length > 0) {
+    for (const a of existing) await services.connectAccount(a.id);
     return;
   }
+  if (REAL) {
+    console.log('[wa-archive] real mode: add an account from the UI and scan the QR.');
+    return; // never seed mock data in real mode
+  }
+  // Mock mode: seed demo accounts so the UI has data (spec §96).
   for (const name of ['Personal', 'Business', 'Factory']) {
     const acc = services.repos.accounts.create({ displayName: name });
     await services.connectAccount(acc.id);

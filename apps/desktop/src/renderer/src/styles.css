@@ -211,6 +211,12 @@ body {
 .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; }
 .btn.primary { background: var(--accent); color: #06231d; }
 .btn.ghost { background: transparent; color: var(--text-dim); }
+.spinner {
+  width: 34px; height: 34px; margin: 0 auto 12px;
+  border: 3px solid var(--panel-3); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .offline-banner {
   background: var(--panel-2); color: var(--text-dim); font-size: 12px;
   text-align: center; padding: 4px;

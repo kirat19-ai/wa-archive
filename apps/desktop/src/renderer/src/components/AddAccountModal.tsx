@@ -7,8 +7,8 @@ interface Props {
 }
 
 /**
- * Phase 1 uses the mock adapter, so this just names the account. Phase 2 adds
- * the "Connect WhatsApp → scan QR" linked-device flow (spec §5) here.
+ * Names the account, then hands off to the connection flow: in real mode a QR
+ * appears to link the device (spec §5); in mock mode it fills with demo data.
  */
 export function AddAccountModal({ onCancel, onCreate, busy }: Props) {
   const [name, setName] = useState('');
@@ -29,8 +29,8 @@ export function AddAccountModal({ onCancel, onCreate, busy }: Props) {
           onChange={(e) => setPhone(e.target.value)}
         />
         <p style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 0 }}>
-          Phase 1 seeds this account with a local mock dataset. Linked-device QR
-          connection arrives in Phase 2.
+          Next you’ll link the device by scanning a QR from WhatsApp → Linked
+          Devices. WA Archive never asks for your WhatsApp password.
         </p>
         <div className="actions">
           <button className="btn ghost" onClick={onCancel} disabled={busy}>

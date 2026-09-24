@@ -8,6 +8,8 @@
 export const AppEvent = {
   WhatsAppConnected: 'whatsapp.connected',
   WhatsAppDisconnected: 'whatsapp.disconnected',
+  /** Full connection state incl. QR data URL, for the linked-device UI (spec §5). */
+  AccountConnection: 'account.connection',
   WhatsAppMessageReceived: 'whatsapp.message.received',
   WhatsAppMessageUpdated: 'whatsapp.message.updated',
   WhatsAppMessageDeleted: 'whatsapp.message.deleted',

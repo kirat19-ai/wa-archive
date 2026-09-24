@@ -40,6 +40,8 @@ export class ArchiveEngine {
           });
           this.bus.emit(AppEvent.WhatsAppConnected, { accountId: this.accountId });
         }
+        // Forward full state (incl. QR) so the UI can drive the linked-device flow.
+        this.bus.emit(AppEvent.AccountConnection, state);
       }),
       this.adapter.onMessage((msg) => this.archiveMessage(msg)),
       this.adapter.onMessageUpdate((u) => {
