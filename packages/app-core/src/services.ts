@@ -6,9 +6,10 @@ import {
   type Repositories,
 } from '@wa-archive/database';
 import { join } from 'node:path';
-import { ArchiveEngine, EventBus } from '@wa-archive/archive';
+import { ArchiveEngine, EventBus, type MediaSink } from '@wa-archive/archive';
+import { LocalArchiveStorage, MediaManager, type ArchiveStorage } from '@wa-archive/media';
 import { BaileysWhatsAppAdapter, MockWhatsAppAdapter } from '@wa-archive/whatsapp';
-import type { IWhatsAppAdapter } from '@wa-archive/shared';
+import type { AppEventName, IWhatsAppAdapter } from '@wa-archive/shared';
 
 interface AccountRuntime {
   adapter: IWhatsAppAdapter;
@@ -26,14 +27,24 @@ interface AccountRuntime {
 export class AppServices {
   db!: Db;
   repos!: Repositories;
+  storage!: ArchiveStorage;
+  media!: MediaManager;
   readonly bus = new EventBus();
   private runtimes = new Map<string, AccountRuntime>();
 
   constructor(private readonly adapterFactory: (accountId: string) => IWhatsAppAdapter) {}
 
-  init(dbFile: string, migrationsFolder: string): void {
+  /**
+   * @param storageRoot base folder for archived media (spec §21). Defaults to a
+   *   sibling of the DB file when omitted.
+   */
+  init(dbFile: string, migrationsFolder: string, storageRoot?: string): void {
     this.db = openDatabase({ file: dbFile, migrationsFolder });
     this.repos = createRepositories(this.db);
+    this.storage = new LocalArchiveStorage(storageRoot ?? join(dbFile, '..', 'archive'));
+    this.media = new MediaManager(this.repos, this.storage, {
+      emit: (event, payload) => this.bus.emit(event as AppEventName, payload),
+    });
   }
 
   shutdown(): void {
@@ -48,7 +59,21 @@ export class AppServices {
   async connectAccount(accountId: string): Promise<void> {
     if (this.runtimes.has(accountId)) return;
     const adapter = this.adapterFactory(accountId);
-    const engine = new ArchiveEngine(accountId, adapter, this.repos, this.bus);
+    // Media sink: create the DB row, then enqueue the download (spec §23).
+    const mediaSink: MediaSink = ({ accountId: acc, messageRowId, ref, adapter: ad }) => {
+      const mediaId = this.repos.media.create(acc, {
+        messageId: messageRowId,
+        mediaType: ref.mediaType,
+        mimeType: ref.mimeType,
+        originalFilename: ref.originalFilename,
+        width: ref.width,
+        height: ref.height,
+        duration: ref.duration,
+        fileSize: ref.fileSize,
+      });
+      this.media.enqueue({ accountId: acc, mediaId, ref, adapter: ad });
+    };
+    const engine = new ArchiveEngine(accountId, adapter, this.repos, this.bus, mediaSink);
     engine.start();
     this.runtimes.set(accountId, { adapter, engine });
 

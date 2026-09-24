@@ -26,6 +26,9 @@ export function registerIpc(services: AppServices, getWindow: () => BrowserWindo
     handlers.searchAccount(services, id, query),
   );
   ipcMain.handle(IPC.SearchAll, (_e, query: string) => handlers.searchAll(services, query));
+  ipcMain.handle(IPC.MediaList, (_e, id: string, type?: string) =>
+    handlers.listMedia(services, id, type),
+  );
 
   services.bus.onAny((event, payload) => {
     getWindow()?.webContents.send(IPC.EventChannel, { event, payload });

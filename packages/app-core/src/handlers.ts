@@ -1,5 +1,7 @@
-import type { AccountDTO, ChatDTO, MessageDTO, SearchHitDTO } from './dto.js';
+import type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO } from './dto.js';
 import type { AppServices } from './services.js';
+
+type MediaRow = ReturnType<AppServices['repos']['media']['listByAccount']>[number];
 
 type ChatRow = ReturnType<AppServices['repos']['chats']['list']>[number];
 type MessageRow = ReturnType<AppServices['repos']['messages']['list']>[number];
@@ -40,7 +42,14 @@ export const handlers = {
     chatId: string,
     opts?: { limit?: number; before?: number },
   ): MessageDTO[] {
-    return s.repos.messages.list(accountId, chatId, opts).map(toMessageDTO);
+    return s.repos.messages.list(accountId, chatId, opts).map((m) => {
+      const dto = toMessageDTO(m);
+      // Attach archived media so the thread can render it inline (spec §36).
+      if (m.messageType !== 'TEXT' && m.messageType !== 'SYSTEM') {
+        dto.media = s.repos.media.listByMessage(accountId, m.id).map(toMediaDTO);
+      }
+      return dto;
+    });
   },
   searchAccount(s: AppServices, accountId: string, query: string): SearchHitDTO[] {
     return s.repos.search.searchAccount(accountId, query);
@@ -49,7 +58,47 @@ export const handlers = {
     const ids = s.repos.accounts.list().map((a) => a.id);
     return s.repos.search.searchAccounts(ids, query);
   },
+
+  listMedia(s: AppServices, accountId: string, mediaType?: string): MediaDTO[] {
+    return s.repos.media.listByAccount(accountId, mediaType).map(toMediaDTO);
+  },
+  mediaForMessage(s: AppServices, accountId: string, messageId: string): MediaDTO[] {
+    return s.repos.media.listByMessage(accountId, messageId).map(toMediaDTO);
+  },
+
+  /** Resolve an archived media file to an absolute path for streaming (spec §38). */
+  mediaFile(
+    s: AppServices,
+    accountId: string,
+    mediaId: string,
+  ): { absolutePath: string; mimeType: string | null; filename: string | null } | null {
+    const row = s.repos.media.get(accountId, mediaId);
+    if (!row || row.downloadStatus !== 'ARCHIVED' || !row.storagePath) return null;
+    if (!s.storage.exists(row.storagePath)) return null;
+    return {
+      absolutePath: s.storage.absolutePath(row.storagePath),
+      mimeType: row.mimeType,
+      filename: row.originalFilename,
+    };
+  },
 };
+
+export function toMediaDTO(m: MediaRow): MediaDTO {
+  return {
+    id: m.id,
+    accountId: m.accountId,
+    messageId: m.messageId,
+    mediaType: m.mediaType,
+    mimeType: m.mimeType,
+    originalFilename: m.originalFilename,
+    fileSize: m.fileSize,
+    width: m.width,
+    height: m.height,
+    duration: m.duration,
+    downloadStatus: m.downloadStatus,
+    hasFile: m.downloadStatus === 'ARCHIVED' && Boolean(m.storagePath),
+  };
+}
 
 export function toAccountDTO(s: AppServices, r: AccountRow): AccountDTO {
   return {
@@ -63,6 +112,8 @@ export function toAccountDTO(s: AppServices, r: AccountRow): AccountDTO {
     stats: {
       chats: s.repos.chats.list(r.id, { includeDeleted: true }).length,
       messages: s.repos.messages.countByAccount(r.id),
+      media: s.repos.media.countByAccount(r.id),
+      storageBytes: s.repos.media.storageBytesByAccount(r.id),
     },
   };
 }
@@ -96,5 +147,6 @@ export function toMessageDTO(m: MessageRow): MessageDTO {
     quotedMessageId: m.quotedMessageId,
     forwarded: m.forwarded,
     whatsappDeleted: m.whatsappDeleted,
+    media: [],
   };
 }

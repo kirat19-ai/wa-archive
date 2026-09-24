@@ -211,6 +211,21 @@ body {
 .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; }
 .btn.primary { background: var(--accent); color: #06231d; }
 .btn.ghost { background: transparent; color: var(--text-dim); }
+.media-thumb {
+  max-width: 260px; max-height: 320px; border-radius: 6px; cursor: pointer;
+  display: block; background: var(--panel-3); object-fit: cover;
+}
+video.media-thumb { cursor: default; }
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 50;
+  display: grid; place-items: center; padding: 40px;
+}
+.lightbox img, .lightbox video { max-width: 92vw; max-height: 88vh; border-radius: 6px; }
+.lightbox .lb-close {
+  position: absolute; top: 18px; right: 22px; font-size: 28px; color: #fff;
+  background: none; border: none; cursor: pointer;
+}
+.lightbox .lb-bar { position: absolute; bottom: 20px; color: var(--text-dim); font-size: 13px; }
 .spinner {
   width: 34px; height: 34px; margin: 0 auto 12px;
   border: 3px solid var(--panel-3); border-top-color: var(--accent);

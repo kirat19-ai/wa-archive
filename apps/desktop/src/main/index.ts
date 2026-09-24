@@ -1,8 +1,14 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
-import { AppServices, mockAdapterFactory } from '@wa-archive/app-core';
+import { pathToFileURL } from 'node:url';
+import { app, BrowserWindow, net, protocol, shell } from 'electron';
+import { AppServices, handlers, makeBaileysFactory, mockAdapterFactory } from '@wa-archive/app-core';
 import { registerIpc } from './ipc.js';
+
+// Custom scheme to stream archived media into <img>/<video>/<a> (spec §38).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'wa-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let services: AppServices | null = null;
@@ -51,12 +57,23 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  services = new AppServices(mockAdapterFactory);
+  const real = process.env.WA_REAL === '1';
+  const factory = real ? makeBaileysFactory(join(dataDir(), 'auth')) : mockAdapterFactory;
+  services = new AppServices(factory);
   const dbFile = join(dataDir(), 'archive.sqlite');
   console.log('[wa-archive] data dir:', dataDir());
   console.log('[wa-archive] migrations:', migrationsFolder());
-  services.init(dbFile, migrationsFolder());
+  services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'));
   registerIpc(services, () => mainWindow);
+
+  // Stream archived media: wa-media://media/<accountId>/<mediaId>
+  protocol.handle('wa-media', (request) => {
+    const u = new URL(request.url);
+    const [, accountId, mediaId] = u.pathname.split('/');
+    const file = accountId && mediaId ? handlers.mediaFile(services!, accountId, mediaId) : null;
+    if (!file) return new Response('not found', { status: 404 });
+    return net.fetch(pathToFileURL(file.absolutePath).toString());
+  });
 
   createWindow();
 

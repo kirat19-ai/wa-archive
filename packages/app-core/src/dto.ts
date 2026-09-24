@@ -7,7 +7,23 @@ export interface AccountDTO {
   profileName: string | null;
   archiveStartedAt: number | null;
   lastSyncAt: number | null;
-  stats: { chats: number; messages: number };
+  stats: { chats: number; messages: number; media: number; storageBytes: number };
+}
+
+export interface MediaDTO {
+  id: string;
+  accountId: string;
+  messageId: string;
+  mediaType: string;
+  mimeType: string | null;
+  originalFilename: string | null;
+  fileSize: number | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  downloadStatus: string;
+  /** URL to fetch the bytes (LAN server); null until archived. */
+  hasFile: boolean;
 }
 
 export interface ChatDTO {
@@ -36,6 +52,7 @@ export interface MessageDTO {
   quotedMessageId: string | null;
   forwarded: boolean;
   whatsappDeleted: boolean;
+  media: MediaDTO[];
 }
 
 export interface SearchHitDTO {

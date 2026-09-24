@@ -1,11 +1,11 @@
-import type { AccountDTO, ChatDTO, MessageDTO, SearchHitDTO } from '@wa-archive/app-core';
+import type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO } from '@wa-archive/app-core';
 
 /**
  * Typed IPC contract between the Electron main process and the renderer.
  * DTOs are shared with the LAN server via @wa-archive/app-core so both
  * transports speak the same shapes.
  */
-export type { AccountDTO, ChatDTO, MessageDTO, SearchHitDTO };
+export type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO };
 
 export interface WaApi {
   accounts: {
@@ -29,6 +29,11 @@ export interface WaApi {
     account(accountId: string, query: string): Promise<SearchHitDTO[]>;
     all(query: string): Promise<SearchHitDTO[]>;
   };
+  media: {
+    list(accountId: string, type?: string): Promise<MediaDTO[]>;
+    /** Synchronous URL for <img>/<video>/<a> (spec §38). */
+    url(accountId: string, mediaId: string): string;
+  };
   /** Subscribe to backend events (spec §58 live updates). Returns an unsubscribe. */
   onEvent(cb: (event: string, payload: unknown) => void): () => void;
 }
@@ -43,5 +48,6 @@ export const IPC = {
   MessagesList: 'messages:list',
   SearchAccount: 'search:account',
   SearchAll: 'search:all',
+  MediaList: 'media:list',
   EventChannel: 'wa:event',
 } as const;

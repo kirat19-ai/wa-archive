@@ -104,8 +104,13 @@ export class MockWhatsAppAdapter implements IWhatsAppAdapter {
   }
 
   async downloadMedia(ref: NormalizedMediaRef): Promise<DownloadedMedia> {
-    // Return a small deterministic placeholder buffer.
-    const bytes = Buffer.from(`MOCK-MEDIA:${ref.mediaType}:${ref.originalFilename ?? ''}`);
+    // Produce renderable placeholder bytes so the media pipeline and viewers can
+    // be exercised end to end without a real WhatsApp connection.
+    if (ref.mediaType === 'IMAGE' || ref.mediaType === 'STICKER') {
+      const svg = placeholderSvg(ref.mediaType, ref.originalFilename ?? this.accountId);
+      return { data: Buffer.from(svg), mimeType: 'image/svg+xml' };
+    }
+    const bytes = Buffer.from(`MOCK-${ref.mediaType}-${ref.originalFilename ?? ''}-payload`);
     return { data: bytes, mimeType: ref.mimeType };
   }
 
@@ -183,4 +188,21 @@ export class MockWhatsAppAdapter implements IWhatsAppAdapter {
 
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Deterministic colorful SVG placeholder for mock image/sticker media. */
+function placeholderSvg(kind: string, seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xffff;
+  const hue = h % 360;
+  const c1 = `hsl(${hue} 60% 45%)`;
+  const c2 = `hsl(${(hue + 40) % 360} 60% 35%)`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>
+  </linearGradient></defs>
+  <rect width="480" height="360" fill="url(#g)"/>
+  <text x="50%" y="48%" font-family="sans-serif" font-size="34" fill="white" text-anchor="middle" opacity="0.9">${kind === 'STICKER' ? '🩹 sticker' : '🖼 image'}</text>
+  <text x="50%" y="62%" font-family="monospace" font-size="15" fill="white" text-anchor="middle" opacity="0.7">WA Archive · mock</text>
+</svg>`;
 }

@@ -24,6 +24,11 @@ const api: WaApi = {
     account: (accountId, query) => ipcRenderer.invoke(IPC.SearchAccount, accountId, query),
     all: (query) => ipcRenderer.invoke(IPC.SearchAll, query),
   },
+  media: {
+    list: (accountId, type) => ipcRenderer.invoke(IPC.MediaList, accountId, type),
+    // Streamed by the custom `wa-media://` protocol registered in the main process.
+    url: (accountId, mediaId) => `wa-media://media/${accountId}/${mediaId}`,
+  },
   onEvent: (cb) => {
     const listener = (_e: unknown, msg: { event: string; payload: unknown }) =>
       cb(msg.event, msg.payload);

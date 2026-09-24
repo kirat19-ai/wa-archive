@@ -6,6 +6,8 @@ import { ChatList } from './components/ChatList.js';
 import { MessageThread } from './components/MessageThread.js';
 import { AddAccountModal } from './components/AddAccountModal.js';
 import { ConnectModal } from './components/ConnectModal.js';
+import { Lightbox } from './components/Lightbox.js';
+import type { MediaDTO } from '../../shared-ipc/contract';
 
 interface ConnState {
   status: string;
@@ -29,6 +31,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [connStates, setConnStates] = useState<Record<string, ConnState>>({});
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<MediaDTO | null>(null);
 
   const refreshAccounts = useCallback(async () => {
     setAccounts(await window.wa.accounts.list());
@@ -212,9 +215,11 @@ export function App() {
             )}
           </div>
 
-          <MessageThread chat={activeChat} messages={messages} />
+          <MessageThread chat={activeChat} messages={messages} onOpenMedia={setLightbox} />
         </>
       )}
+
+      {lightbox && <Lightbox media={lightbox} onClose={() => setLightbox(null)} />}
 
       {modal && (
         <AddAccountModal onCancel={() => setModal(false)} onCreate={createAccount} busy={busy} />

@@ -10,6 +10,7 @@ import {
 } from '@wa-archive/shared';
 import type { Db } from './client.js';
 import { chats, contacts, messages, whatsappAccounts } from './schema.js';
+import { MediaRepository } from './media-repository.js';
 
 /**
  * Account-isolated data access (spec §95).
@@ -357,6 +358,7 @@ export interface Repositories {
   messages: MessageRepository;
   contacts: ContactRepository;
   search: SearchRepository;
+  media: MediaRepository;
 }
 
 export function createRepositories(db: Db): Repositories {
@@ -366,6 +368,7 @@ export function createRepositories(db: Db): Repositories {
     messages: new MessageRepository(db),
     contacts: new ContactRepository(db),
     search: new SearchRepository(db),
+    media: new MediaRepository(db),
   };
 }
 

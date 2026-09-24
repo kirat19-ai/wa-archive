@@ -1,6 +1,7 @@
 import type {
   AccountDTO,
   ChatDTO,
+  MediaDTO,
   MessageDTO,
   SearchHitDTO,
   WaApi,
@@ -55,6 +56,10 @@ export function createWebClient(): WaApi {
       account: (accountId, query) =>
         get<SearchHitDTO[]>(`/api/accounts/${accountId}/search?${q({ query })}`),
       all: (query) => get<SearchHitDTO[]>(`/api/search?${q({ query })}`),
+    },
+    media: {
+      list: (accountId, type) => get<MediaDTO[]>(`/api/accounts/${accountId}/media?${q({ type })}`),
+      url: (accountId, mediaId) => `/api/accounts/${accountId}/media/${mediaId}/file`,
     },
     onEvent: (cb) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';

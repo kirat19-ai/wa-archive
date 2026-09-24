@@ -114,6 +114,17 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
       const query = url.searchParams.get('query') ?? '';
       return json(res, 200, handlers.searchAccount(services, seg[2], query));
     }
+    // GET /api/accounts/:id/media
+    if (seg[1] === 'accounts' && seg[2] && seg[3] === 'media' && !seg[4] && method === 'GET') {
+      const type = url.searchParams.get('type') ?? undefined;
+      return json(res, 200, handlers.listMedia(services, seg[2], type));
+    }
+    // GET /api/accounts/:id/media/:mediaId/file  → stream bytes
+    if (seg[1] === 'accounts' && seg[2] && seg[3] === 'media' && seg[4] && seg[5] === 'file' && method === 'GET') {
+      const file = handlers.mediaFile(services, seg[2], seg[4]);
+      if (!file) return json(res, 404, { error: 'media not archived' });
+      return streamFile(req, res, file.absolutePath, file.mimeType ?? 'application/octet-stream');
+    }
     // GET /api/search
     if (p === '/api/search' && method === 'GET') {
       const query = url.searchParams.get('query') ?? '';
@@ -141,6 +152,36 @@ async function readJson(req: IncomingMessage): Promise<Record<string, string>> {
   } catch {
     return {};
   }
+}
+
+/** Stream an archived media file with HTTP Range support (spec §38 media viewer). */
+function streamFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  absPath: string,
+  mime: string,
+): void {
+  if (!existsSync(absPath)) return void json(res, 404, { error: 'not found' });
+  const size = statSync(absPath).size;
+  const range = req.headers.range;
+  if (range) {
+    const m = /bytes=(\d*)-(\d*)/.exec(range);
+    const start = m && m[1] ? parseInt(m[1], 10) : 0;
+    const end = m && m[2] ? parseInt(m[2], 10) : size - 1;
+    if (start >= size || end >= size) {
+      res.writeHead(416, { 'content-range': `bytes */${size}` });
+      return void res.end();
+    }
+    res.writeHead(206, {
+      'content-type': mime,
+      'content-range': `bytes ${start}-${end}/${size}`,
+      'accept-ranges': 'bytes',
+      'content-length': end - start + 1,
+    });
+    return void createReadStream(absPath, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { 'content-type': mime, 'content-length': size, 'accept-ranges': 'bytes' });
+  createReadStream(absPath).pipe(res);
 }
 
 /** Serve a static file, guarding against path traversal (spec §80), SPA fallback to index.html. */

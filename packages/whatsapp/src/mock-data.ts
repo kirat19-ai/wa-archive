@@ -155,7 +155,7 @@ function mediaRefFor(type: MessageType) {
     mediaType,
     mimeType:
       mediaType === MediaType.IMAGE
-        ? 'image/jpeg'
+        ? 'image/svg+xml' // mock images are SVG placeholders so they render in-browser
         : mediaType === MediaType.VIDEO
           ? 'video/mp4'
           : mediaType === MediaType.DOCUMENT

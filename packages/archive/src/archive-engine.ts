@@ -3,11 +3,24 @@ import {
   ChatType,
   type IWhatsAppAdapter,
   type NormalizedChat,
+  type NormalizedMediaRef,
   type NormalizedMessage,
   type Unsubscribe,
 } from '@wa-archive/shared';
 import type { Repositories } from '@wa-archive/database';
 import type { EventBus } from './event-bus.js';
+
+/**
+ * Hook that hands a freshly-archived media reference to the media pipeline
+ * (implemented in @wa-archive/media, wired by @wa-archive/app-core). Kept as a
+ * callback so the archive engine has no dependency on the media package.
+ */
+export type MediaSink = (info: {
+  accountId: string;
+  messageRowId: string;
+  ref: NormalizedMediaRef;
+  adapter: IWhatsAppAdapter;
+}) => void;
 
 /**
  * Turns a connected account's adapter events into a permanent, account-isolated
@@ -26,6 +39,7 @@ export class ArchiveEngine {
     private readonly adapter: IWhatsAppAdapter,
     private readonly repos: Repositories,
     private readonly bus: EventBus,
+    private readonly mediaSink?: MediaSink,
   ) {}
 
   /** Subscribe to live adapter events. Idempotent writes make this safe to restart. */
@@ -117,16 +131,24 @@ export class ArchiveEngine {
   archiveMessage(msg: NormalizedMessage, opts: { silent?: boolean } = {}): void {
     const chatRowId = this.resolveChatId(msg.chatId);
     const id = this.repos.messages.insert(this.accountId, chatRowId, msg);
-    if (id && !opts.silent) {
+    if (!id) return; // already archived (idempotent)
+
+    if (!opts.silent) {
       this.bus.emit(AppEvent.ArchiveMessageCreated, {
         accountId: this.accountId,
         chatId: chatRowId,
         messageId: id,
       });
-      // Media pipeline hook (Phase 3): enqueue download when msg.media present.
-      if (msg.media) {
-        this.bus.emit(AppEvent.ArchiveMediaQueued, { accountId: this.accountId, messageId: id });
-      }
+    }
+    // Media pipeline (spec §23): create the media row and hand the ref to the
+    // download queue. Runs for historical (silent) messages too.
+    if (msg.media && this.mediaSink) {
+      this.mediaSink({
+        accountId: this.accountId,
+        messageRowId: id,
+        ref: msg.media,
+        adapter: this.adapter,
+      });
     }
   }
 
