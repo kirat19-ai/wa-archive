@@ -18,14 +18,18 @@ async function get<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 async function post<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await postRaw(url, body);
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  return res.json() as Promise<T>;
+}
+/** POST that resolves even on non-2xx, so callers (login) can read {ok:false}. */
+async function postRaw(url: string, body: unknown): Promise<Response> {
+  return fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return res.json() as Promise<T>;
 }
 const q = (params: Record<string, unknown>) =>
   Object.entries(params)
@@ -60,6 +64,17 @@ export function createWebClient(): WaApi {
     media: {
       list: (accountId, type) => get<MediaDTO[]>(`/api/accounts/${accountId}/media?${q({ type })}`),
       url: (accountId, mediaId) => `/api/accounts/${accountId}/media/${mediaId}/file`,
+    },
+    auth: {
+      me: () => get('/api/auth/me'),
+      accounts: () => get('/api/auth/accounts'),
+      loginAccount: async (accountId, password, remember) =>
+        (await postRaw('/api/auth/login/account', { accountId, password, remember: remember ? '1' : '0' })).ok,
+      loginAdmin: async (username, password, remember) =>
+        (await postRaw('/api/auth/login/admin', { username, password, remember: remember ? '1' : '0' })).ok,
+      logout: async () => {
+        await postRaw('/api/auth/logout', {});
+      },
     },
     onEvent: (cb) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';

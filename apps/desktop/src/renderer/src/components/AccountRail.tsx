@@ -7,10 +7,11 @@ interface Props {
   onSelect: (id: string | null) => void;
   onAdd: () => void;
   onToggleTheme: () => void;
+  onLogout?: () => void;
 }
 
 /** Vertical account switcher (spec §30–31), always showing connection status. */
-export function AccountRail({ accounts, activeId, onSelect, onAdd, onToggleTheme }: Props) {
+export function AccountRail({ accounts, activeId, onSelect, onAdd, onToggleTheme, onLogout }: Props) {
   return (
     <div className="rail">
       <div
@@ -48,6 +49,11 @@ export function AccountRail({ accounts, activeId, onSelect, onAdd, onToggleTheme
       <button className="icon-btn" title="Toggle theme" onClick={onToggleTheme}>
         ◐
       </button>
+      {onLogout && (
+        <button className="icon-btn" title="Sign out" onClick={onLogout}>
+          ⏻
+        </button>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@wa-archive/app-core": "*",
+    "@wa-archive/auth": "*",
     "@wa-archive/database": "*",
     "@wa-archive/shared": "*",
     "ws": "^8.18.0"

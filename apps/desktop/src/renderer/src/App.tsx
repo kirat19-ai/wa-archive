@@ -7,7 +7,8 @@ import { MessageThread } from './components/MessageThread.js';
 import { AddAccountModal } from './components/AddAccountModal.js';
 import { ConnectModal } from './components/ConnectModal.js';
 import { Lightbox } from './components/Lightbox.js';
-import type { MediaDTO } from '../../shared-ipc/contract';
+import { LoginScreen } from './components/LoginScreen.js';
+import type { AuthState, MediaDTO } from '../../shared-ipc/contract';
 
 interface ConnState {
   status: string;
@@ -32,10 +33,25 @@ export function App() {
   const [connStates, setConnStates] = useState<Record<string, ConnState>>({});
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<MediaDTO | null>(null);
+  // null = still checking; over the LAN this drives the login gate (spec §44).
+  const [auth, setAuth] = useState<AuthState | null>(null);
+
+  const checkAuth = useCallback(async () => {
+    if (!window.wa.auth) {
+      setAuth({ authenticated: true, isAdmin: true, accountScope: null }); // Electron: local trust
+      return;
+    }
+    setAuth(await window.wa.auth.me());
+  }, []);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
 
   const refreshAccounts = useCallback(async () => {
+    if (window.wa.auth && !auth?.authenticated) return; // wait for login over LAN
     setAccounts(await window.wa.accounts.list());
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     void refreshAccounts();
@@ -145,6 +161,20 @@ export function App() {
     if (chat) await openChat(chat);
   };
 
+  if (auth === null) {
+    return <div className="login-wrap"><div className="spinner" /></div>;
+  }
+  if (!auth.authenticated) {
+    return <LoginScreen onAuthed={checkAuth} />;
+  }
+
+  const logout = async () => {
+    await window.wa.auth?.logout();
+    setView(null);
+    setAccounts([]);
+    await checkAuth();
+  };
+
   return (
     <div className="app">
       <AccountRail
@@ -153,6 +183,7 @@ export function App() {
         onSelect={setView}
         onAdd={() => setModal(true)}
         onToggleTheme={toggleTheme}
+        onLogout={window.wa.auth ? logout : undefined}
       />
 
       {view === null ? (

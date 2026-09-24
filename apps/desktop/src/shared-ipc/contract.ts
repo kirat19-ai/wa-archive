@@ -34,8 +34,27 @@ export interface WaApi {
     /** Synchronous URL for <img>/<video>/<a> (spec §38). */
     url(accountId: string, mediaId: string): string;
   };
+  /**
+   * Present only over the LAN transport (spec §44-48). Absent in Electron, where
+   * the local user is trusted and no login is required.
+   */
+  auth?: AuthApi;
   /** Subscribe to backend events (spec §58 live updates). Returns an unsubscribe. */
   onEvent(cb: (event: string, payload: unknown) => void): () => void;
+}
+
+export interface AuthState {
+  authenticated: boolean;
+  isAdmin: boolean;
+  accountScope: string | null;
+}
+
+export interface AuthApi {
+  me(): Promise<AuthState>;
+  accounts(): Promise<{ id: string; displayName: string }[]>;
+  loginAccount(accountId: string, password: string, remember?: boolean): Promise<boolean>;
+  loginAdmin(username: string, password: string, remember?: boolean): Promise<boolean>;
+  logout(): Promise<void>;
 }
 
 export const IPC = {
