@@ -21,7 +21,8 @@
     "db:generate": "npm run db:generate -w @wa-archive/database",
     "db:migrate": "npm run db:migrate -w @wa-archive/database",
     "dev": "npm run dev -w @wa-archive/desktop",
-    "seed": "npm run seed -w @wa-archive/desktop"
+    "dev:server": "npm run start -w @wa-archive/server",
+    "build:web": "npm run build:web -w @wa-archive/desktop"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

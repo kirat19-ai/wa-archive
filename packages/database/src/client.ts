@@ -33,7 +33,7 @@ export function openDatabase(opts: OpenDbOptions): Db {
   sqlite.pragma('busy_timeout = 5000');
   sqlite.pragma('synchronous = NORMAL');
 
-  const db = drizzle(sqlite, { schema }) as Db;
+  const db = drizzle(sqlite, { schema }) as unknown as Db;
   db.$sqlite = sqlite;
 
   if (existsSync(opts.migrationsFolder)) {
