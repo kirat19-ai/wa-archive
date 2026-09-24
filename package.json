@@ -1,0 +1,35 @@
+{
+  "name": "wa-archive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WA Archive — local-first, multi-account WhatsApp archive platform",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "npm run db:generate -w @wa-archive/database",
+    "db:migrate": "npm run db:migrate -w @wa-archive/database",
+    "dev": "npm run dev -w @wa-archive/desktop",
+    "seed": "npm run seed -w @wa-archive/desktop"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

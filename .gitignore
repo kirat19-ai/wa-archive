@@ -1,0 +1,30 @@
+node_modules/
+dist/
+dist-electron/
+out/
+build/
+release/
+*.log
+.DS_Store
+.env
+.env.local
+
+# WA Archive runtime data — never commit private archive data or auth state
+/data/
+**/archive-data/
+**/auth/account_*/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.wabackup
+
+# Test / coverage
+coverage/
+.vitest/
+playwright-report/
+test-results/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
