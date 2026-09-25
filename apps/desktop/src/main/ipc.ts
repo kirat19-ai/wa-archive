@@ -36,6 +36,10 @@ export function registerIpc(services: AppServices, getWindow: () => BrowserWindo
   ipcMain.handle(IPC.ExportChat, (_e, id: string, chatId: string, format: 'txt' | 'json' | 'html' | 'csv') =>
     handlers.exportChat(services, id, chatId, format),
   );
+  ipcMain.handle(IPC.ExportChatZip, async (_e, id: string, chatId: string) => {
+    const zip = await handlers.exportChatZip(services, id, chatId);
+    return { filename: zip.filename, base64: zip.buffer.toString('base64') };
+  });
   ipcMain.handle(IPC.BackupCreate, (_e, accountIds: string[], password: string) => {
     const ids = accountIds?.length ? accountIds : services.repos.accounts.list().map((a) => a.id);
     const buf = handlers.createBackup(services, ids, password);

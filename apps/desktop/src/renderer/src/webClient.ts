@@ -76,6 +76,18 @@ export function createWebClient(): WaApi {
           const filename = /filename="(.+?)"/.exec(cd)?.[1] ?? `chat.${format}`;
           return { filename, mimeType: r.headers.get('content-type') ?? 'text/plain', content: await r.text() };
         }),
+      exportChatZip: async (accountId, chatId) => {
+        const r = await fetch(`/api/accounts/${accountId}/chats/${chatId}/export?format=zip`, {
+          credentials: 'same-origin',
+        });
+        if (!r.ok) throw new Error(`export failed: ${r.status}`);
+        const cd = r.headers.get('content-disposition') ?? '';
+        const filename = /filename="(.+?)"/.exec(cd)?.[1] ?? 'chat.zip';
+        const buf = new Uint8Array(await r.arrayBuffer());
+        let bin = '';
+        buf.forEach((b) => (bin += String.fromCharCode(b)));
+        return { filename, base64: btoa(bin) };
+      },
     },
     backups: {
       create: async (accountIds, password) => {

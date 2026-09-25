@@ -48,6 +48,8 @@ export interface WaApi {
   };
   files: {
     exportChat(accountId: string, chatId: string, format: ExportFmt): Promise<ExportResult>;
+    /** ZIP bundle (messages + media) as base64 (spec §64). */
+    exportChatZip(accountId: string, chatId: string): Promise<{ filename: string; base64: string }>;
   };
   backups: {
     create(accountIds: string[], password: string): Promise<{ filename: string; base64: string }>;
@@ -116,6 +118,7 @@ export const IPC = {
   SearchAll: 'search:all',
   MediaList: 'media:list',
   ExportChat: 'files:exportChat',
+  ExportChatZip: 'files:exportChatZip',
   BackupCreate: 'backup:create',
   BackupInspect: 'backup:inspect',
   BackupRestore: 'backup:restore',

@@ -1,6 +1,7 @@
 import {
   createBackup,
   exportChat,
+  exportChatBundle,
   inspectBackup,
   restoreBackup,
   type BackupSummary,
@@ -84,6 +85,15 @@ export const handlers = {
     format: ExportFormat,
   ): ExportResult {
     return exportChat(s.repos, accountId, chatId, format);
+  },
+
+  /** Export a chat as a ZIP bundle including its media files (spec §64). */
+  exportChatZip(
+    s: AppServices,
+    accountId: string,
+    chatId: string,
+  ): Promise<{ filename: string; buffer: Buffer }> {
+    return exportChatBundle(s.repos, s.storage, accountId, chatId);
   },
 
   /** Encrypted backup of the given accounts (spec §61-62). */

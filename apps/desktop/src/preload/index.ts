@@ -32,6 +32,7 @@ const api: WaApi = {
   },
   files: {
     exportChat: (accountId, chatId, format) => ipcRenderer.invoke(IPC.ExportChat, accountId, chatId, format),
+    exportChatZip: (accountId, chatId) => ipcRenderer.invoke(IPC.ExportChatZip, accountId, chatId),
   },
   backups: {
     create: (accountIds, password) => ipcRenderer.invoke(IPC.BackupCreate, accountIds, password),

@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, join, normalize, resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import type { AppEventName } from '@wa-archive/shared';
-import { handlers, type AppServices } from '@wa-archive/app-core';
+import { handlers, type AppServices, type ExportFormat } from '@wa-archive/app-core';
 import type { SessionContext, SessionService } from '@wa-archive/auth';
 import {
   clearSessionCookie,
@@ -221,11 +221,19 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         if (!file) return json(res, 404, { error: 'media not archived' });
         return streamFile(req, res, file.absolutePath, file.mimeType ?? 'application/octet-stream');
       }
-      // GET /api/accounts/:id/chats/:chatId/export?format=txt|json|html|csv (spec §64)
+      // GET /api/accounts/:id/chats/:chatId/export?format=txt|json|html|csv|zip (spec §64)
       if (seg[3] === 'chats' && seg[4] && seg[5] === 'export' && method === 'GET') {
-        const format = (url.searchParams.get('format') ?? 'txt') as 'txt' | 'json' | 'html' | 'csv';
+        const format = url.searchParams.get('format') ?? 'txt';
         try {
-          const out = handlers.exportChat(services, accountId, seg[4], format);
+          if (format === 'zip') {
+            const zip = await handlers.exportChatZip(services, accountId, seg[4]);
+            res.writeHead(200, {
+              'content-type': 'application/zip',
+              'content-disposition': `attachment; filename="${zip.filename}"`,
+            });
+            return void res.end(zip.buffer);
+          }
+          const out = handlers.exportChat(services, accountId, seg[4], format as ExportFormat);
           res.writeHead(200, {
             'content-type': out.mimeType,
             'content-disposition': `attachment; filename="${out.filename}"`,

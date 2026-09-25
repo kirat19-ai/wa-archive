@@ -1,4 +1,6 @@
 import type { Repositories } from '@wa-archive/database';
+import type { ArchiveStorage } from '@wa-archive/media';
+import { createZip, type ZipEntry } from './zip.js';
 
 export type ExportFormat = 'txt' | 'json' | 'html' | 'csv';
 
@@ -68,6 +70,42 @@ export function exportChat(
         content: renderHtml(chat.name ?? chat.phoneNumber ?? 'Chat', messages),
       };
   }
+}
+
+/** Export a chat as a ZIP bundle: messages.json + messages.html + media/ (spec §64). */
+export async function exportChatBundle(
+  repos: Repositories,
+  storage: ArchiveStorage,
+  accountId: string,
+  chatId: string,
+): Promise<{ filename: string; buffer: Buffer }> {
+  const chat = repos.chats.get(accountId, chatId);
+  if (!chat) throw new Error('chat not found');
+  const name = (chat.name ?? chat.phoneNumber ?? 'chat').replace(/[^\w.-]+/g, '_');
+
+  const jsonOut = exportChat(repos, accountId, chatId, 'json');
+  const htmlOut = exportChat(repos, accountId, chatId, 'html');
+  const entries: ZipEntry[] = [
+    { name: 'messages.json', data: Buffer.from(jsonOut.content, 'utf8') },
+    { name: 'messages.html', data: Buffer.from(htmlOut.content, 'utf8') },
+  ];
+
+  const messages = repos.messages.list(accountId, chatId, { limit: 1_000_000 });
+  const seen = new Set<string>();
+  for (const m of messages) {
+    for (const media of repos.media.listByMessage(accountId, m.id)) {
+      if (media.downloadStatus !== 'ARCHIVED' || !media.storagePath) continue;
+      if (!storage.exists(media.storagePath)) continue;
+      const ext = media.storagePath.split('.').pop() ?? 'bin';
+      let fname = `media/${media.originalFilename ?? `${media.id}.${ext}`}`.replace(/[^\w./-]+/g, '_');
+      // Avoid collisions on duplicate original filenames.
+      if (seen.has(fname)) fname = `media/${media.id}.${ext}`;
+      seen.add(fname);
+      entries.push({ name: fname, data: await storage.read(media.storagePath) });
+    }
+  }
+
+  return { filename: `${name}.zip`, buffer: createZip(entries) };
 }
 
 function csv(s: string): string {

@@ -1,6 +1,6 @@
 import type { ChatDTO, ExportFmt, MediaDTO, MessageDTO } from '../../../shared-ipc/contract';
 import { formatTime } from './ChatList.js';
-import { downloadText } from '../download.js';
+import { downloadBase64, downloadText } from '../download.js';
 
 interface Props {
   chat: ChatDTO | null;
@@ -97,10 +97,15 @@ export function MessageThread({ chat, messages, onOpenMedia }: Props) {
           title="Export chat (spec §64)"
           value=""
           onChange={async (e) => {
-            const fmt = e.target.value as ExportFmt;
+            const fmt = e.target.value;
             if (!fmt) return;
             e.target.value = '';
-            const out = await window.wa.files.exportChat(chat.accountId, chat.id, fmt);
+            if (fmt === 'zip') {
+              const out = await window.wa.files.exportChatZip(chat.accountId, chat.id);
+              downloadBase64(out.filename, 'application/zip', out.base64);
+              return;
+            }
+            const out = await window.wa.files.exportChat(chat.accountId, chat.id, fmt as ExportFmt);
             downloadText(out.filename, out.mimeType, out.content);
           }}
         >
@@ -109,6 +114,7 @@ export function MessageThread({ chat, messages, onOpenMedia }: Props) {
           <option value="json">JSON (.json)</option>
           <option value="html">HTML (.html)</option>
           <option value="csv">CSV (.csv)</option>
+          <option value="zip">ZIP + media (.zip)</option>
         </select>
       </div>
       <div className="thread-body">
