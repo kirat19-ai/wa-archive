@@ -8,6 +8,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build-win:
     runs-on: windows-latest
@@ -35,11 +38,14 @@ jobs:
           # Personal/unsigned build — do not attempt code signing.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Upload installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: WA-Archive-Windows-Setup
-          path: |
-            apps/desktop/release/*.exe
-            apps/desktop/release/*.blockmap
-          if-no-files-found: error
+      - name: Publish installer to a GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la apps/desktop/release
+          gh release delete wa-archive-windows --yes --cleanup-tag 2>/dev/null || true
+          gh release create wa-archive-windows \
+            apps/desktop/release/*.exe apps/desktop/release/*.blockmap \
+            --title "WA Archive — Windows installer" \
+            --notes "Auto-built Windows installer (unsigned). Download the .exe below and run it. See docs/WINDOWS.md for auto-start setup."
