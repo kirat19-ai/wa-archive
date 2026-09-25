@@ -4,6 +4,9 @@
 # (see docs/WINDOWS.md); this produces a standalone .exe installer instead.
 appId: com.waarchive.app
 productName: WA Archive
+# Pinned so electron-builder knows which Electron dist to download for the target
+# (it can't infer from a semver range, esp. with --ignore-scripts installs).
+electronVersion: 37.10.3
 directories:
   output: release
   buildResources: build
