@@ -59,6 +59,8 @@ export interface WaApi {
    * the local user is trusted and no login is required.
    */
   auth?: AuthApi;
+  /** Admin management (LAN pairing + devices), LAN transport only. */
+  admin?: AdminApi;
   /** Subscribe to backend events (spec §58 live updates). Returns an unsubscribe. */
   onEvent(cb: (event: string, payload: unknown) => void): () => void;
 }
@@ -75,6 +77,30 @@ export interface AuthApi {
   loginAccount(accountId: string, password: string, remember?: boolean): Promise<boolean>;
   loginAdmin(username: string, password: string, remember?: boolean): Promise<boolean>;
   logout(): Promise<void>;
+}
+
+export interface LanInfoDTO {
+  enabled: boolean;
+  urls: string[];
+  qr: string | null;
+}
+
+export interface DeviceDTO {
+  id: string;
+  label: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  accountScope: string | null;
+  lastSeenAt: number | null;
+  revokedAt: number | null;
+  createdAt: number;
+}
+
+/** Admin-only management, present only over the authenticated LAN transport. */
+export interface AdminApi {
+  lanInfo(): Promise<LanInfoDTO>;
+  devices(): Promise<DeviceDTO[]>;
+  revokeDevice(deviceId: string): Promise<void>;
 }
 
 export const IPC = {

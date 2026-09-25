@@ -6,6 +6,7 @@ interface Props {
   onAdd: () => void;
   onBackups?: () => void;
   onManage?: (id: string) => void;
+  onDevices?: () => void;
 }
 
 const fmt = new Intl.NumberFormat('en-US');
@@ -23,18 +24,25 @@ function humanBytes(n: number): string {
 }
 
 /** MY WHATSAPP ACCOUNTS dashboard (spec §29). */
-export function Dashboard({ accounts, onOpen, onAdd, onBackups, onManage }: Props) {
+export function Dashboard({ accounts, onOpen, onAdd, onBackups, onManage, onDevices }: Props) {
   return (
     <div className="dash">
       <h1>My WhatsApp Accounts</h1>
       <div className="muted">
         {accounts.length} account{accounts.length === 1 ? '' : 's'} · permanent local archive
       </div>
-      {onBackups && (
+      {(onBackups || onDevices) && (
         <div className="dash-actions">
-          <button className="btn ghost" onClick={onBackups}>
-            🔐 Backup &amp; Restore
-          </button>
+          {onBackups && (
+            <button className="btn ghost" onClick={onBackups}>
+              🔐 Backup &amp; Restore
+            </button>
+          )}
+          {onDevices && (
+            <button className="btn ghost" onClick={onDevices}>
+              📱 Local access &amp; devices
+            </button>
+          )}
         </div>
       )}
       <div className="cards">

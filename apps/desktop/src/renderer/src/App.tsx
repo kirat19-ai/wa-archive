@@ -11,6 +11,7 @@ import { LoginScreen } from './components/LoginScreen.js';
 import { BackupsPanel } from './components/BackupsPanel.js';
 import { AccountSettingsModal } from './components/AccountSettingsModal.js';
 import { MediaGallery } from './components/MediaGallery.js';
+import { DevicesPanel } from './components/DevicesPanel.js';
 import type { AuthState, MediaDTO } from '../../shared-ipc/contract';
 
 interface ConnState {
@@ -39,6 +40,7 @@ export function App() {
   const [showBackups, setShowBackups] = useState(false);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [pane, setPane] = useState<'chats' | 'media'>('chats');
+  const [showDevices, setShowDevices] = useState(false);
   // null = still checking; over the LAN this drives the login gate (spec §44).
   const [auth, setAuth] = useState<AuthState | null>(null);
 
@@ -204,6 +206,7 @@ export function App() {
           onAdd={() => setModal(true)}
           onBackups={auth.isAdmin ? () => setShowBackups(true) : undefined}
           onManage={auth.isAdmin ? (id) => setSettingsId(id) : undefined}
+          onDevices={auth.isAdmin && window.wa.admin ? () => setShowDevices(true) : undefined}
         />
       ) : (
         <>
@@ -294,6 +297,8 @@ export function App() {
           onRestored={() => void refreshAccounts()}
         />
       )}
+
+      {showDevices && <DevicesPanel onClose={() => setShowDevices(false)} />}
 
       {settingsId && accounts.find((a) => a.id === settingsId) && (
         <AccountSettingsModal

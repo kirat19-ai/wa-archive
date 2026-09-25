@@ -95,6 +95,13 @@ export function createWebClient(): WaApi {
       restore: (base64, password, accountIds) =>
         post('/api/restore', { fileBase64: base64, password, accountIds }),
     },
+    admin: {
+      lanInfo: () => get('/api/lan/info'),
+      devices: () => get('/api/devices'),
+      revokeDevice: async (id) => {
+        await postRaw(`/api/devices/${id}/revoke`, {});
+      },
+    },
     auth: {
       me: () => get('/api/auth/me'),
       accounts: () => get('/api/auth/accounts'),

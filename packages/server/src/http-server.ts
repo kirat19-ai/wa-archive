@@ -13,6 +13,7 @@ import {
   SESSION_COOKIE,
   setSessionCookie,
 } from './auth-http.js';
+import { lanInfo } from './lan.js';
 
 export interface ArchiveServerOptions {
   services: AppServices;
@@ -23,6 +24,8 @@ export interface ArchiveServerOptions {
   requireAuth?: boolean;
   /** Mark cookies Secure (only when serving over HTTPS/TLS, spec §57). */
   secureCookies?: boolean;
+  /** Binding info, used to report LAN URLs + a pairing QR (spec §43). */
+  lan?: { host: string; port: number; https: boolean };
 }
 
 const MIME: Record<string, string> = {
@@ -263,6 +266,14 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
     if (p === '/api/audit' && method === 'GET') {
       if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
       return json(res, 200, sessionService.listAudit(200));
+    }
+    // GET /api/lan/info — LAN URLs + pairing QR (admin, spec §43)
+    if (p === '/api/lan/info' && method === 'GET') {
+      if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+      const info = opts.lan
+        ? await lanInfo(opts.lan.host, opts.lan.port, opts.lan.https)
+        : { enabled: false, urls: [], qr: null };
+      return json(res, 200, info);
     }
 
     // ── backup / restore (admin only, spec §61-63) ────────────────────────

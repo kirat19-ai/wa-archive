@@ -211,6 +211,12 @@ body {
 .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; }
 .btn.primary { background: var(--accent); color: #06231d; }
 .btn.ghost { background: transparent; color: var(--text-dim); }
+.device-list { max-height: 240px; overflow-y: auto; margin: 6px 0 4px; }
+.device-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px;
+}
+.device-row .btn.danger { padding: 4px 12px; font-size: 12px; }
 .media-filters {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px;
   border-bottom: 1px solid var(--border); background: var(--panel);

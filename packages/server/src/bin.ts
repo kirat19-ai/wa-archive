@@ -75,6 +75,7 @@ async function main(): Promise<void> {
     webRoot: existsSync(webRoot) ? webRoot : undefined,
     requireAuth: process.env.WA_AUTH === '0' ? false : true,
     secureCookies: process.env.WA_HTTPS === '1',
+    lan: { host: HOST, port: PORT, https: process.env.WA_HTTPS === '1' },
   });
   server.listen(PORT, HOST, () => {
     console.log(`[wa-archive] listening on http://${HOST}:${PORT}  (LAN ${lanOn ? 'ON' : 'OFF — loopback only'})`);
