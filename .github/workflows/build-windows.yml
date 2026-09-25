@@ -19,7 +19,11 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        # --ignore-scripts: better-sqlite3 v13 and whatsapp-rust-bridge ship
+        # prebuilt binaries in their npm packages, so we skip npm's spurious
+        # node-gyp compile (which fails to detect the runner's newer Visual
+        # Studio). electron-builder downloads the target Electron itself.
+        run: npm install --ignore-scripts
 
       - name: Build web UI (PWA assets bundled into the app)
         run: npm run build:web
