@@ -10,6 +10,7 @@ import { Lightbox } from './components/Lightbox.js';
 import { LoginScreen } from './components/LoginScreen.js';
 import { BackupsPanel } from './components/BackupsPanel.js';
 import { AccountSettingsModal } from './components/AccountSettingsModal.js';
+import { MediaGallery } from './components/MediaGallery.js';
 import type { AuthState, MediaDTO } from '../../shared-ipc/contract';
 
 interface ConnState {
@@ -37,6 +38,7 @@ export function App() {
   const [lightbox, setLightbox] = useState<MediaDTO | null>(null);
   const [showBackups, setShowBackups] = useState(false);
   const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [pane, setPane] = useState<'chats' | 'media'>('chats');
   // null = still checking; over the LAN this drives the login gate (spec §44).
   const [auth, setAuth] = useState<AuthState | null>(null);
 
@@ -88,6 +90,11 @@ export function App() {
     setMessages([]);
     void loadChats();
   }, [loadChats]);
+
+  // Return to the chat pane whenever the selected account changes.
+  useEffect(() => {
+    setPane('chats');
+  }, [accountId]);
 
   const openChat = useCallback(async (chat: ChatDTO) => {
     setActiveChat(chat);
@@ -208,10 +215,20 @@ export function App() {
                   {view === 'ALL'
                     ? 'Search across every archive'
                     : activeAccount
-                      ? `${activeAccount.stats.messages.toLocaleString()} messages archived`
+                      ? `${activeAccount.stats.messages.toLocaleString()} messages · ${activeAccount.stats.media.toLocaleString()} media`
                       : ''}
                 </span>
               </div>
+              {view !== 'ALL' && (
+                <div className="tabs" style={{ padding: 0 }}>
+                  <button className={`tab ${pane === 'chats' ? 'active' : ''}`} onClick={() => setPane('chats')}>
+                    Chats
+                  </button>
+                  <button className={`tab ${pane === 'media' ? 'active' : ''}`} onClick={() => setPane('media')}>
+                    Media
+                  </button>
+                </div>
+              )}
             </div>
             <div className="search-box">
               <input
@@ -256,7 +273,15 @@ export function App() {
             )}
           </div>
 
-          <MessageThread chat={activeChat} messages={messages} onOpenMedia={setLightbox} />
+          {pane === 'media' && accountId ? (
+            <MediaGallery
+              accountId={accountId}
+              accountName={activeAccount?.displayName ?? ''}
+              onOpen={setLightbox}
+            />
+          ) : (
+            <MessageThread chat={activeChat} messages={messages} onOpenMedia={setLightbox} />
+          )}
         </>
       )}
 
