@@ -30,6 +30,21 @@ export function registerIpc(services: AppServices, getWindow: () => BrowserWindo
     handlers.listMedia(services, id, type),
   );
 
+  ipcMain.handle(IPC.ExportChat, (_e, id: string, chatId: string, format: 'txt' | 'json' | 'html' | 'csv') =>
+    handlers.exportChat(services, id, chatId, format),
+  );
+  ipcMain.handle(IPC.BackupCreate, (_e, accountIds: string[], password: string) => {
+    const ids = accountIds?.length ? accountIds : services.repos.accounts.list().map((a) => a.id);
+    const buf = handlers.createBackup(services, ids, password);
+    return { filename: 'WAArchiveBackup.wabackup', base64: buf.toString('base64') };
+  });
+  ipcMain.handle(IPC.BackupInspect, (_e, base64: string, password: string) =>
+    handlers.inspectBackup(services, Buffer.from(base64, 'base64'), password),
+  );
+  ipcMain.handle(IPC.BackupRestore, (_e, base64: string, password: string, accountIds?: string[]) =>
+    handlers.restoreBackup(services, Buffer.from(base64, 'base64'), password, accountIds),
+  );
+
   services.bus.onAny((event, payload) => {
     getWindow()?.webContents.send(IPC.EventChannel, { event, payload });
   });

@@ -12,6 +12,8 @@ export interface ArchiveStorage {
   /** Persist bytes and return the relative storage path recorded in the DB. */
   save(accountId: string, mediaType: string, mediaId: string, ext: string, data: Buffer): Promise<string>;
   saveThumbnail(accountId: string, mediaId: string, data: Buffer): Promise<string>;
+  /** Write bytes at an exact relative path (used by restore, spec §63). */
+  writeRaw(relativePath: string, data: Buffer): Promise<void>;
   absolutePath(relativePath: string): string;
   exists(relativePath: string): boolean;
   read(relativePath: string): Promise<Buffer>;
@@ -46,6 +48,10 @@ export class LocalArchiveStorage implements ArchiveStorage {
     const relPath = this.rel(accountId, 'thumbnails', `${mediaId}.jpg`);
     await this.writeAbs(relPath, data);
     return relPath;
+  }
+
+  async writeRaw(relativePath: string, data: Buffer): Promise<void> {
+    await this.writeAbs(relativePath, data);
   }
 
   absolutePath(relativePath: string): string {

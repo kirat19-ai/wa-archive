@@ -29,6 +29,14 @@ const api: WaApi = {
     // Streamed by the custom `wa-media://` protocol registered in the main process.
     url: (accountId, mediaId) => `wa-media://media/${accountId}/${mediaId}`,
   },
+  files: {
+    exportChat: (accountId, chatId, format) => ipcRenderer.invoke(IPC.ExportChat, accountId, chatId, format),
+  },
+  backups: {
+    create: (accountIds, password) => ipcRenderer.invoke(IPC.BackupCreate, accountIds, password),
+    inspect: (base64, password) => ipcRenderer.invoke(IPC.BackupInspect, base64, password),
+    restore: (base64, password, accountIds) => ipcRenderer.invoke(IPC.BackupRestore, base64, password, accountIds),
+  },
   onEvent: (cb) => {
     const listener = (_e: unknown, msg: { event: string; payload: unknown }) =>
       cb(msg.event, msg.payload);

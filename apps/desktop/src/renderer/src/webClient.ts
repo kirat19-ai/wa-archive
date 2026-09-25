@@ -65,6 +65,35 @@ export function createWebClient(): WaApi {
       list: (accountId, type) => get<MediaDTO[]>(`/api/accounts/${accountId}/media?${q({ type })}`),
       url: (accountId, mediaId) => `/api/accounts/${accountId}/media/${mediaId}/file`,
     },
+    files: {
+      exportChat: (accountId, chatId, format) =>
+        fetch(`/api/accounts/${accountId}/chats/${chatId}/export?format=${format}`, {
+          credentials: 'same-origin',
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(`export failed: ${r.status}`);
+          const cd = r.headers.get('content-disposition') ?? '';
+          const filename = /filename="(.+?)"/.exec(cd)?.[1] ?? `chat.${format}`;
+          return { filename, mimeType: r.headers.get('content-type') ?? 'text/plain', content: await r.text() };
+        }),
+    },
+    backups: {
+      create: async (accountIds, password) => {
+        const r = await fetch('/api/backup', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ accountIds, password }),
+        });
+        if (!r.ok) throw new Error(`backup failed: ${r.status}`);
+        const buf = new Uint8Array(await r.arrayBuffer());
+        let bin = '';
+        buf.forEach((b) => (bin += String.fromCharCode(b)));
+        return { filename: 'WAArchiveBackup.wabackup', base64: btoa(bin) };
+      },
+      inspect: (base64, password) => post('/api/restore/inspect', { fileBase64: base64, password }),
+      restore: (base64, password, accountIds) =>
+        post('/api/restore', { fileBase64: base64, password, accountIds }),
+    },
     auth: {
       me: () => get('/api/auth/me'),
       accounts: () => get('/api/auth/accounts'),

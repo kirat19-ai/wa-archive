@@ -205,6 +205,20 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         if (!file) return json(res, 404, { error: 'media not archived' });
         return streamFile(req, res, file.absolutePath, file.mimeType ?? 'application/octet-stream');
       }
+      // GET /api/accounts/:id/chats/:chatId/export?format=txt|json|html|csv (spec §64)
+      if (seg[3] === 'chats' && seg[4] && seg[5] === 'export' && method === 'GET') {
+        const format = (url.searchParams.get('format') ?? 'txt') as 'txt' | 'json' | 'html' | 'csv';
+        try {
+          const out = handlers.exportChat(services, accountId, seg[4], format);
+          res.writeHead(200, {
+            'content-type': out.mimeType,
+            'content-disposition': `attachment; filename="${out.filename}"`,
+          });
+          return void res.end(out.content);
+        } catch (e) {
+          return json(res, 404, { error: String((e as Error).message) });
+        }
+      }
       if (seg[3] === 'password' && method === 'POST') {
         if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
         const body = await readJson(req);
@@ -236,6 +250,54 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
     if (p === '/api/audit' && method === 'GET') {
       if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
       return json(res, 200, sessionService.listAudit(200));
+    }
+
+    // ── backup / restore (admin only, spec §61-63) ────────────────────────
+    if (p === '/api/backup' && method === 'POST') {
+      if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+      const body = (await readJson(req)) as unknown as { accountIds?: string[]; password?: string };
+      if (!body.password) return json(res, 400, { error: 'password required' });
+      const ids = body.accountIds?.length
+        ? body.accountIds
+        : services.repos.accounts.list().map((a) => a.id);
+      const buf = handlers.createBackup(services, ids, body.password);
+      sessionService.audit('backup_created', { ipAddress: ip, detail: { accounts: ids.length } });
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-disposition': 'attachment; filename="WAArchiveBackup.wabackup"',
+      });
+      return void res.end(buf);
+    }
+    if (p === '/api/restore/inspect' && method === 'POST') {
+      if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+      const body = (await readJson(req)) as unknown as { fileBase64?: string; password?: string };
+      if (!body.fileBase64 || !body.password) return json(res, 400, { error: 'file and password required' });
+      try {
+        return json(res, 200, handlers.inspectBackup(services, Buffer.from(body.fileBase64, 'base64'), body.password));
+      } catch (e) {
+        return json(res, 400, { error: String((e as Error).message) });
+      }
+    }
+    if (p === '/api/restore' && method === 'POST') {
+      if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+      const body = (await readJson(req)) as unknown as {
+        fileBase64?: string;
+        password?: string;
+        accountIds?: string[];
+      };
+      if (!body.fileBase64 || !body.password) return json(res, 400, { error: 'file and password required' });
+      try {
+        const result = await handlers.restoreBackup(
+          services,
+          Buffer.from(body.fileBase64, 'base64'),
+          body.password,
+          body.accountIds,
+        );
+        sessionService.audit('backup_restored', { ipAddress: ip, detail: { restored: result.restored.length } });
+        return json(res, 200, result);
+      } catch (e) {
+        return json(res, 400, { error: String((e as Error).message) });
+      }
     }
 
     json(res, 404, { error: 'unknown endpoint' });

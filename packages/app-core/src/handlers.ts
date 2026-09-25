@@ -1,3 +1,12 @@
+import {
+  createBackup,
+  exportChat,
+  inspectBackup,
+  restoreBackup,
+  type BackupSummary,
+  type ExportFormat,
+  type ExportResult,
+} from '@wa-archive/backup';
 import type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO } from './dto.js';
 import type { AppServices } from './services.js';
 
@@ -64,6 +73,31 @@ export const handlers = {
   },
   mediaForMessage(s: AppServices, accountId: string, messageId: string): MediaDTO[] {
     return s.repos.media.listByMessage(accountId, messageId).map(toMediaDTO);
+  },
+
+  exportChat(
+    s: AppServices,
+    accountId: string,
+    chatId: string,
+    format: ExportFormat,
+  ): ExportResult {
+    return exportChat(s.repos, accountId, chatId, format);
+  },
+
+  /** Encrypted backup of the given accounts (spec §61-62). */
+  createBackup(s: AppServices, accountIds: string[], password: string): Buffer {
+    return createBackup(s.db, s.storage, accountIds, password);
+  },
+  inspectBackup(_s: AppServices, file: Buffer, password: string): BackupSummary {
+    return inspectBackup(file, password);
+  },
+  restoreBackup(
+    s: AppServices,
+    file: Buffer,
+    password: string,
+    selected?: string[],
+  ): Promise<{ restored: string[] }> {
+    return restoreBackup(s.db, s.storage, file, password, selected);
   },
 
   /** Resolve an archived media file to an absolute path for streaming (spec §38). */

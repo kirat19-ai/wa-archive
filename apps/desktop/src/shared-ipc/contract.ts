@@ -1,11 +1,21 @@
-import type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO } from '@wa-archive/app-core';
+import type {
+  AccountDTO,
+  BackupSummary,
+  ChatDTO,
+  ExportResult,
+  MediaDTO,
+  MessageDTO,
+  SearchHitDTO,
+} from '@wa-archive/app-core';
 
 /**
  * Typed IPC contract between the Electron main process and the renderer.
  * DTOs are shared with the LAN server via @wa-archive/app-core so both
  * transports speak the same shapes.
  */
-export type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO };
+export type { AccountDTO, BackupSummary, ChatDTO, ExportResult, MediaDTO, MessageDTO, SearchHitDTO };
+
+export type ExportFmt = 'txt' | 'json' | 'html' | 'csv';
 
 export interface WaApi {
   accounts: {
@@ -33,6 +43,14 @@ export interface WaApi {
     list(accountId: string, type?: string): Promise<MediaDTO[]>;
     /** Synchronous URL for <img>/<video>/<a> (spec §38). */
     url(accountId: string, mediaId: string): string;
+  };
+  files: {
+    exportChat(accountId: string, chatId: string, format: ExportFmt): Promise<ExportResult>;
+  };
+  backups: {
+    create(accountIds: string[], password: string): Promise<{ filename: string; base64: string }>;
+    inspect(base64: string, password: string): Promise<BackupSummary>;
+    restore(base64: string, password: string, accountIds?: string[]): Promise<{ restored: string[] }>;
   };
   /**
    * Present only over the LAN transport (spec §44-48). Absent in Electron, where
@@ -68,5 +86,9 @@ export const IPC = {
   SearchAccount: 'search:account',
   SearchAll: 'search:all',
   MediaList: 'media:list',
+  ExportChat: 'files:exportChat',
+  BackupCreate: 'backup:create',
+  BackupInspect: 'backup:inspect',
+  BackupRestore: 'backup:restore',
   EventChannel: 'wa:event',
 } as const;

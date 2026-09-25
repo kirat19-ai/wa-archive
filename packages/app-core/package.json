@@ -11,6 +11,7 @@
     "@wa-archive/shared": "*",
     "@wa-archive/database": "*",
     "@wa-archive/archive": "*",
+    "@wa-archive/backup": "*",
     "@wa-archive/media": "*",
     "@wa-archive/whatsapp": "*"
   },

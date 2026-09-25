@@ -1,5 +1,6 @@
-import type { ChatDTO, MediaDTO, MessageDTO } from '../../../shared-ipc/contract';
+import type { ChatDTO, ExportFmt, MediaDTO, MessageDTO } from '../../../shared-ipc/contract';
 import { formatTime } from './ChatList.js';
+import { downloadText } from '../download.js';
 
 interface Props {
   chat: ChatDTO | null;
@@ -91,6 +92,24 @@ export function MessageThread({ chat, messages, onOpenMedia }: Props) {
             {chat.whatsappDeleted ? 'Deleted from WhatsApp • Preserved locally' : chat.phoneNumber ?? chat.chatType.toLowerCase()}
           </div>
         </div>
+        <select
+          className="export-select"
+          title="Export chat (spec §64)"
+          value=""
+          onChange={async (e) => {
+            const fmt = e.target.value as ExportFmt;
+            if (!fmt) return;
+            e.target.value = '';
+            const out = await window.wa.files.exportChat(chat.accountId, chat.id, fmt);
+            downloadText(out.filename, out.mimeType, out.content);
+          }}
+        >
+          <option value="">Export ▾</option>
+          <option value="txt">Text (.txt)</option>
+          <option value="json">JSON (.json)</option>
+          <option value="html">HTML (.html)</option>
+          <option value="csv">CSV (.csv)</option>
+        </select>
       </div>
       <div className="thread-body">
         {messages.map((m) => {
