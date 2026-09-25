@@ -9,6 +9,7 @@ import { ConnectModal } from './components/ConnectModal.js';
 import { Lightbox } from './components/Lightbox.js';
 import { LoginScreen } from './components/LoginScreen.js';
 import { BackupsPanel } from './components/BackupsPanel.js';
+import { AccountSettingsModal } from './components/AccountSettingsModal.js';
 import type { AuthState, MediaDTO } from '../../shared-ipc/contract';
 
 interface ConnState {
@@ -35,6 +36,7 @@ export function App() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<MediaDTO | null>(null);
   const [showBackups, setShowBackups] = useState(false);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
   // null = still checking; over the LAN this drives the login gate (spec §44).
   const [auth, setAuth] = useState<AuthState | null>(null);
 
@@ -194,6 +196,7 @@ export function App() {
           onOpen={setView}
           onAdd={() => setModal(true)}
           onBackups={auth.isAdmin ? () => setShowBackups(true) : undefined}
+          onManage={auth.isAdmin ? (id) => setSettingsId(id) : undefined}
         />
       ) : (
         <>
@@ -264,6 +267,14 @@ export function App() {
           accounts={accounts}
           onClose={() => setShowBackups(false)}
           onRestored={() => void refreshAccounts()}
+        />
+      )}
+
+      {settingsId && accounts.find((a) => a.id === settingsId) && (
+        <AccountSettingsModal
+          account={accounts.find((a) => a.id === settingsId)!}
+          onClose={() => setSettingsId(null)}
+          onChanged={() => void refreshAccounts()}
         />
       )}
 

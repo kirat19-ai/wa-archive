@@ -73,6 +73,11 @@ export class AccountRepository {
       .where(eq(whatsappAccounts.id, accountId))
       .run();
   }
+
+  /** Permanently delete an account and (via FK cascade) all its archived rows (spec §94). */
+  delete(accountId: string) {
+    this.db.delete(whatsappAccounts).where(eq(whatsappAccounts.id, accountId)).run();
+  }
 }
 
 export class ChatRepository {

@@ -5,6 +5,7 @@ interface Props {
   onOpen: (id: string) => void;
   onAdd: () => void;
   onBackups?: () => void;
+  onManage?: (id: string) => void;
 }
 
 const fmt = new Intl.NumberFormat('en-US');
@@ -22,7 +23,7 @@ function humanBytes(n: number): string {
 }
 
 /** MY WHATSAPP ACCOUNTS dashboard (spec §29). */
-export function Dashboard({ accounts, onOpen, onAdd, onBackups }: Props) {
+export function Dashboard({ accounts, onOpen, onAdd, onBackups, onManage }: Props) {
   return (
     <div className="dash">
       <h1>My WhatsApp Accounts</h1>
@@ -47,9 +48,21 @@ export function Dashboard({ accounts, onOpen, onAdd, onBackups }: Props) {
                   {a.phoneNumber ?? 'No number yet'}
                 </div>
               </div>
-              <div style={{ marginLeft: 'auto' }}>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className={`status-dot status-${a.connectionStatus}`} style={{ position: 'static', display: 'inline-block', border: 'none' }} />{' '}
                 <span className="muted" style={{ margin: 0, fontSize: 12 }}>{a.connectionStatus.toLowerCase()}</span>
+                {onManage && (
+                  <button
+                    className="icon-btn"
+                    title="Account settings"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onManage(a.id);
+                    }}
+                  >
+                    ⚙
+                  </button>
+                )}
               </div>
             </div>
             <div className="stats">

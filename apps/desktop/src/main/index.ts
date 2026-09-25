@@ -63,7 +63,7 @@ app.whenReady().then(() => {
   const dbFile = join(dataDir(), 'archive.sqlite');
   console.log('[wa-archive] data dir:', dataDir());
   console.log('[wa-archive] migrations:', migrationsFolder());
-  services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'));
+  services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'), join(dataDir(), 'auth'));
   registerIpc(services, () => mainWindow);
 
   // Stream archived media: wa-media://media/<accountId>/<mediaId>

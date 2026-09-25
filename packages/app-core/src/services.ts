@@ -6,6 +6,7 @@ import {
   type Repositories,
 } from '@wa-archive/database';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 import { ArchiveEngine, EventBus, type MediaSink } from '@wa-archive/archive';
 import { LocalArchiveStorage, MediaManager, type ArchiveStorage } from '@wa-archive/media';
 import { BaileysWhatsAppAdapter, MockWhatsAppAdapter } from '@wa-archive/whatsapp';
@@ -38,10 +39,13 @@ export class AppServices {
    * @param storageRoot base folder for archived media (spec §21). Defaults to a
    *   sibling of the DB file when omitted.
    */
-  init(dbFile: string, migrationsFolder: string, storageRoot?: string): void {
+  private authBaseDir: string | null = null;
+
+  init(dbFile: string, migrationsFolder: string, storageRoot?: string, authBaseDir?: string): void {
     this.db = openDatabase({ file: dbFile, migrationsFolder });
     this.repos = createRepositories(this.db);
     this.storage = new LocalArchiveStorage(storageRoot ?? join(dbFile, '..', 'archive'));
+    this.authBaseDir = authBaseDir ?? null;
     this.media = new MediaManager(this.repos, this.storage, {
       emit: (event, payload) => this.bus.emit(event as AppEventName, payload),
     });
@@ -99,6 +103,36 @@ export class AppServices {
     this.runtimes.delete(accountId);
     // Archive remains fully intact; only the live connection stops (spec §93).
     this.repos.accounts.updateStatus(accountId, 'DISCONNECTED');
+  }
+
+  /**
+   * Remove the WhatsApp *connection* but KEEP the archive (spec §94). Stops the
+   * socket and unlinks the device (deletes the account's auth folder), so it
+   * would need re-linking, while every archived message/media stays intact.
+   */
+  async removeConnection(accountId: string): Promise<void> {
+    await this.disconnectAccount(accountId);
+    if (this.authBaseDir) {
+      await rm(join(this.authBaseDir, `account_${accountId}`), { recursive: true, force: true });
+    }
+    this.repos.accounts.updateStatus(accountId, 'LOGGED_OUT');
+  }
+
+  /**
+   * Permanently DELETE the archived account data (spec §94, §27): removes media
+   * files from disk, then the account row (FK cascade drops all its rows). This
+   * is irreversible — callers must require strong confirmation.
+   */
+  async deleteArchive(accountId: string): Promise<void> {
+    await this.removeConnection(accountId);
+    // Delete physical media files (distinct paths only).
+    const paths = new Set<string>();
+    for (const m of this.repos.media.listByAccount(accountId)) {
+      if (m.storagePath) paths.add(m.storagePath);
+      if (m.thumbnailPath) paths.add(m.thumbnailPath);
+    }
+    for (const rel of paths) await this.storage.remove(rel);
+    this.repos.accounts.delete(accountId); // cascade removes chats/messages/media/...
   }
 }
 

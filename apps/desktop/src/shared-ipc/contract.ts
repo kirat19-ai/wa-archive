@@ -23,6 +23,8 @@ export interface WaApi {
     create(input: { displayName: string; phoneNumber?: string }): Promise<AccountDTO>;
     connect(accountId: string): Promise<void>;
     disconnect(accountId: string): Promise<void>;
+    /** Remove connection but keep the archive, or permanently delete it (spec §94). */
+    remove(accountId: string, mode: 'connection' | 'archive'): Promise<void>;
   };
   chats: {
     list(accountId: string, opts?: { includeDeleted?: boolean }): Promise<ChatDTO[]>;
@@ -80,6 +82,7 @@ export const IPC = {
   AccountsCreate: 'accounts:create',
   AccountsConnect: 'accounts:connect',
   AccountsDisconnect: 'accounts:disconnect',
+  AccountsRemove: 'accounts:remove',
   ChatsList: 'chats:list',
   ChatsListDeleted: 'chats:listDeleted',
   MessagesList: 'messages:list',

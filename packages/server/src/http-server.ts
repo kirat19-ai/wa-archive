@@ -175,6 +175,19 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         await handlers.disconnectAccount(services, accountId);
         return json(res, 200, { ok: true });
       }
+      // POST /api/accounts/:id/remove { mode: 'connection' | 'archive' } (spec §94)
+      if (seg[3] === 'remove' && method === 'POST') {
+        if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+        const body = await readJson(req);
+        if (body.mode === 'archive') {
+          await handlers.deleteArchive(services, accountId);
+          sessionService.audit('archive_deleted', { accountId, ipAddress: ip });
+        } else {
+          await handlers.removeConnection(services, accountId);
+          sessionService.audit('account_removed', { accountId, ipAddress: ip, detail: { kept: 'archive' } });
+        }
+        return json(res, 200, { ok: true });
+      }
       if (seg[3] === 'chats' && !seg[4] && method === 'GET') {
         const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
         return json(res, 200, handlers.listChats(services, accountId, { includeDeleted }));

@@ -12,6 +12,7 @@ const api: WaApi = {
     create: (input) => ipcRenderer.invoke(IPC.AccountsCreate, input),
     connect: (accountId) => ipcRenderer.invoke(IPC.AccountsConnect, accountId),
     disconnect: (accountId) => ipcRenderer.invoke(IPC.AccountsDisconnect, accountId),
+    remove: (accountId, mode) => ipcRenderer.invoke(IPC.AccountsRemove, accountId, mode),
   },
   chats: {
     list: (accountId, opts) => ipcRenderer.invoke(IPC.ChatsList, accountId, opts),

@@ -38,6 +38,8 @@ export const handlers = {
 
   connectAccount: (s: AppServices, accountId: string) => s.connectAccount(accountId),
   disconnectAccount: (s: AppServices, accountId: string) => s.disconnectAccount(accountId),
+  removeConnection: (s: AppServices, accountId: string) => s.removeConnection(accountId),
+  deleteArchive: (s: AppServices, accountId: string) => s.deleteArchive(accountId),
 
   listChats(s: AppServices, accountId: string, opts?: { includeDeleted?: boolean }): ChatDTO[] {
     return s.repos.chats.list(accountId, opts).map(toChatDTO);

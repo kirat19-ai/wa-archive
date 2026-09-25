@@ -44,6 +44,7 @@ export function createWebClient(): WaApi {
       create: (input) => post<AccountDTO>('/api/accounts', input),
       connect: (id) => post<void>(`/api/accounts/${id}/connect`, {}),
       disconnect: (id) => post<void>(`/api/accounts/${id}/disconnect`, {}),
+      remove: (id, mode) => post<void>(`/api/accounts/${id}/remove`, { mode }),
     },
     chats: {
       list: (accountId, opts) =>

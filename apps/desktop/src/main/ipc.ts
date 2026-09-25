@@ -12,6 +12,9 @@ export function registerIpc(services: AppServices, getWindow: () => BrowserWindo
   ipcMain.handle(IPC.AccountsDisconnect, (_e, id: string) =>
     handlers.disconnectAccount(services, id),
   );
+  ipcMain.handle(IPC.AccountsRemove, (_e, id: string, mode: 'connection' | 'archive') =>
+    mode === 'archive' ? handlers.deleteArchive(services, id) : handlers.removeConnection(services, id),
+  );
 
   ipcMain.handle(IPC.ChatsList, (_e, id: string, opts?: { includeDeleted?: boolean }) =>
     handlers.listChats(services, id, opts),
