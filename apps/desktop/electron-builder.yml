@@ -1,0 +1,31 @@
+# electron-builder config for the native desktop app (advanced path).
+# Build ON Windows: cd apps/desktop && npm run dist:win  → release/WA Archive-Setup-*.exe
+# The reliable, cross-platform way to run WA Archive is the server + PWA
+# (see docs/WINDOWS.md); this produces a standalone .exe installer instead.
+appId: com.waarchive.app
+productName: WA Archive
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# Ship the generated DB migrations next to the app (main resolves them from
+# process.resourcesPath/drizzle when packaged).
+extraResources:
+  - from: ../../packages/database/drizzle
+    to: drizzle
+# Native module must stay unpacked so it can be loaded at runtime.
+asarUnpack:
+  - "**/*.node"
+  - "**/better-sqlite3/**"
+npmRebuild: true
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

@@ -18,6 +18,9 @@ release/
 *.sqlite-wal
 *.wabackup
 
+# Windows local secrets (admin password etc.)
+scripts/windows/wa-archive.env
+
 # Test / coverage
 coverage/
 .vitest/

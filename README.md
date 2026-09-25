@@ -145,7 +145,8 @@ Local Database        SQLite (Drizzle) + media storage + FTS5
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE.md`](docs/DATABASE.md),
 [`docs/MULTI_ACCOUNT.md`](docs/MULTI_ACCOUNT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 [`docs/LAN_ACCESS.md`](docs/LAN_ACCESS.md), [`docs/BACKUP.md`](docs/BACKUP.md),
-[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md), and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md), [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md),
+and [`docs/WINDOWS.md`](docs/WINDOWS.md) (run on Windows + auto-start on boot/power-restore).
 
 ---
 
