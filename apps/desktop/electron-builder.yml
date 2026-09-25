@@ -15,11 +15,14 @@ files:
 extraResources:
   - from: ../../packages/database/drizzle
     to: drizzle
-# Native module must stay unpacked so it can be loaded at runtime.
+# Native modules must stay unpacked so they can be loaded at runtime.
 asarUnpack:
   - "**/*.node"
   - "**/better-sqlite3/**"
-npmRebuild: true
+  - "**/whatsapp-rust-bridge/**"
+# better-sqlite3 v13 is an N-API module; its prebuilt binary loads directly under
+# Electron 37 (Node 22, matching N-API level), so no native recompilation.
+npmRebuild: false
 win:
   target: nsis
   artifactName: ${productName}-Setup-${version}.${ext}
