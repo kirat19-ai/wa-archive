@@ -57,8 +57,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const real = process.env.WA_REAL === '1';
-  const factory = real ? makeBaileysFactory(join(dataDir(), 'auth')) : mockAdapterFactory;
+  // The packaged desktop app connects to real WhatsApp by default (QR on
+  // "Add Account"). Set WA_MOCK=1 to use demo data instead.
+  const useMock = process.env.WA_MOCK === '1';
+  const factory = useMock ? mockAdapterFactory : makeBaileysFactory(join(dataDir(), 'auth'));
   services = new AppServices(factory);
   const dbFile = join(dataDir(), 'archive.sqlite');
   console.log('[wa-archive] data dir:', dataDir());
