@@ -10,33 +10,39 @@ the original chat is deleted from your phone.
 > archived, the local copy is authoritative. Deleting a chat on your phone flags
 > it as `deleted from WhatsApp` but **never** removes the archived copy.
 
-This repository is being built in incremental, verified milestones (see
-[Roadmap](#roadmap)). **Phase 1 (foundation + first vertical slice) is complete
-and verified.**
+Built in incremental, verified milestones (see [Roadmap](#roadmap)). **Phases 1–7
+core are complete and verified** (Phase 7 has optional polish remaining).
 
 ---
 
-## What works today (Phase 1)
+## What works today
 
-- **Monorepo** (`packages/*` + `apps/*`) with strict TypeScript.
+- **Monorepo** (`packages/*` + `apps/*`) with strict TypeScript — 11 packages.
 - **SQLite archive** (Drizzle ORM, WAL) with the full schema: 18 tables +
   FTS5 full-text search, all indexes, cascade deletes.
 - **Account isolation** — every WhatsApp-scoped query is keyed by `account_id`;
   cross-account contamination is impossible by construction (verified by test).
-- **Archive engine** — idempotent, at-least-once sync from a normalized adapter
-  into the DB; deletion-preservation semantics.
-- **Mock WhatsApp adapter** — a full in-memory `IWhatsAppAdapter` with a seeded
-  data generator (groups, replies, media, deleted items), so the whole product
-  runs and is testable without linking a phone.
+- **Archive engine** — idempotent, at-least-once sync; deletion preservation.
+- **Real WhatsApp** via WhiskeySockets/Baileys v7 — QR linked-device auth, one
+  isolated connection per account, live messages/edits/deletes/reactions,
+  history import, media download. Plus a full **mock adapter** for dev/tests.
+- **Media pipeline** — async download queue, SHA-256 dedup, per-account storage,
+  exponential-backoff retries, inline viewers + fullscreen lightbox + a
+  filterable media gallery.
 - **WhatsApp-style UI** (React) — multi-account dashboard, account rail with live
-  status, chat list, message thread with media chips and day separators, and
-  instant FTS search. Dark/light theming.
+  status, chat list, message thread, instant FTS search, dark/light theming.
+- **LAN security** — per-account Argon2id passwords, admin account, HttpOnly
+  sessions, per-account authorization (403 across accounts), device management,
+  login rate limiting, audit log, private-range enforcement, login UI.
+- **Backup / restore / export** — AES-256-GCM encrypted `.wabackup`, selective
+  restore, chat export to TXT/JSON/HTML/CSV.
+- **Account removal** — remove connection (keep archive) vs permanently delete.
+- **PWA** — installable, offline app shell via a service worker.
 - **Two transports for the same UI**:
   - **Electron desktop shell** (main/preload/renderer, secure `contextBridge`).
-  - **LAN HTTP + WebSocket server** (foundation of Phase 5) serving the UI as a
-    web app with live updates.
-- **Tests** (Vitest): multi-account isolation, deletion preservation, FTS search,
-  restart persistence — all passing.
+  - **LAN HTTP + WebSocket server** serving the UI as a web app / PWA.
+- **Tests** (Vitest, 25): isolation, deletion preservation, FTS, persistence,
+  Baileys normalization, media pipeline, auth/security, backup round-trip.
 
 ### See it running (no phone required)
 
@@ -127,14 +133,19 @@ Local Database        SQLite (Drizzle) + media storage + FTS5
 |---|---|
 | `@wa-archive/shared` | Enums, normalized types, `IWhatsAppAdapter`, event names, ids |
 | `@wa-archive/database` | Drizzle schema, migrations, WAL client, account-isolated repositories, FTS5 |
-| `@wa-archive/whatsapp` | `MockWhatsAppAdapter` + mock data generator (Baileys adapter: Phase 2) |
+| `@wa-archive/whatsapp` | `BaileysWhatsAppAdapter` (v7) + `MockWhatsAppAdapter` + mock data generator |
 | `@wa-archive/archive` | Typed event bus + `ArchiveEngine` |
+| `@wa-archive/media` | Storage layout, SHA-256 dedup, download queue with backoff |
+| `@wa-archive/auth` | Argon2id passwords, sessions, device management, rate limiter |
+| `@wa-archive/backup` | Encrypted backup/restore + chat export |
 | `@wa-archive/app-core` | `AppServices` (AccountConnectionManager), DTOs, transport-agnostic handlers |
-| `@wa-archive/server` | LAN HTTP + WebSocket server |
-| `apps/desktop` | Electron shell + React renderer (also builds the web UI) |
+| `@wa-archive/server` | LAN HTTP + WebSocket server (auth, per-account authorization) |
+| `apps/desktop` | Electron shell + React renderer (also builds the web UI / PWA) |
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE.md`](docs/DATABASE.md),
-and [`docs/MULTI_ACCOUNT.md`](docs/MULTI_ACCOUNT.md).
+[`docs/MULTI_ACCOUNT.md`](docs/MULTI_ACCOUNT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
+[`docs/LAN_ACCESS.md`](docs/LAN_ACCESS.md), [`docs/BACKUP.md`](docs/BACKUP.md),
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md), and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ---
 
@@ -153,16 +164,31 @@ and [`docs/MULTI_ACCOUNT.md`](docs/MULTI_ACCOUNT.md).
 
 ## Roadmap
 
-- **Phase 1 — Foundation + first vertical slice** ✅ *(done, verified)*
-- **Phase 2 — Baileys adapter**: QR linked-device auth, single real account,
-  message/chat/contact sync.
-- **Phase 3 — Media pipeline**: download workers, dedup (SHA-256), thumbnails,
-  viewers, deletion preservation for media.
-- **Phase 4 — Multiple real accounts**: independent connections end-to-end.
-- **Phase 5 — LAN access & security**: per-account passwords (Argon2id),
-  sessions, device authorization, QR pairing, PWA, private-range validation.
-- **Phase 6 — Backup / restore / export**: encrypted backups, selective restore.
-- **Phase 7 — Hardening, performance, packaging.**
+- **Phase 1 — Foundation + first vertical slice** ✅ *(verified)*
+- **Phase 2 — Baileys v7 adapter**: QR linked-device auth, message/chat/contact
+  sync, media download ✅ *(QR verified against live WhatsApp)*
+- **Phase 3 — Media pipeline**: download queue, SHA-256 dedup, viewers,
+  deletion preservation ✅ *(verified)*
+- **Phase 4 — Multiple accounts + removal**: independent connections; remove
+  connection vs delete archive ✅ *(verified)*
+- **Phase 5 — LAN access & security**: per-account Argon2id passwords, sessions,
+  device authorization, rate limiting, audit, private-range validation ✅
+  *(full spec §99 flow verified)*
+- **Phase 6 — Backup / restore / export**: AES-256-GCM encrypted backups,
+  selective restore, TXT/JSON/HTML/CSV export ✅ *(round-trip verified)*
+- **Phase 7 — Hardening / performance / packaging** 🚧
+  - ✅ Global media library, PWA + offline service worker
+  - ⏳ Remaining: LAN QR pairing screen + desktop "Enable Local Access" toggle,
+    HTTPS/TLS for LAN, list virtualization for very large archives,
+    ZIP-with-media export, Electron packaging (`electron-builder`), thumbnails.
+
+### Known constraint
+
+The Electron desktop shell needs `better-sqlite3` rebuilt for Electron's ABI
+(`npm run rebuild -w @wa-archive/desktop`). On the current Node 26 + Electron 33
+toolchain the prebuilt binary can crash inside Electron (N-API level mismatch);
+the **web/LAN server path is unaffected** and is the recommended way to run today.
+See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ---
 
