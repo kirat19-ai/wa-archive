@@ -1,9 +1,14 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron';
 import { AppServices, handlers, makeBaileysFactory, mockAdapterFactory } from '@wa-archive/app-core';
 import { registerIpc } from './ipc.js';
+
+// The main process is bundled as an ES module ("type": "module"), where
+// __dirname does not exist. Derive it from import.meta.url so preload/renderer
+// paths resolve when packaged (this was the original silent-startup crash).
+const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 // Custom scheme to stream archived media into <img>/<video>/<a> (spec §38).
 protocol.registerSchemesAsPrivileged([
@@ -74,7 +79,7 @@ function createWindow(): void {
     backgroundColor: '#0b141a',
     title: 'WA Archive',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(moduleDir, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -90,7 +95,7 @@ function createWindow(): void {
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    void mainWindow.loadFile(join(moduleDir, '../renderer/index.html'));
   }
 }
 
