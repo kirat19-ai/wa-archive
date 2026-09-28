@@ -69,6 +69,19 @@ function migrationsFolder(): string {
   return join(app.getAppPath(), '..', '..', 'packages', 'database', 'drizzle');
 }
 
+/**
+ * electron-vite emits the preload as index.mjs (ESM, because "type": "module")
+ * but has emitted index.js in other setups. Point at whichever actually exists —
+ * a wrong path silently disables the preload, leaving the renderer with no
+ * window.wa bridge (it then falls back to a LAN server that isn't there and
+ * spins forever).
+ */
+function preloadPath(): string {
+  const mjs = join(moduleDir, '../preload/index.mjs');
+  const js = join(moduleDir, '../preload/index.js');
+  return existsSync(mjs) ? mjs : js;
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -79,7 +92,7 @@ function createWindow(): void {
     backgroundColor: '#0b141a',
     title: 'WA Archive',
     webPreferences: {
-      preload: join(moduleDir, '../preload/index.js'),
+      preload: preloadPath(),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
