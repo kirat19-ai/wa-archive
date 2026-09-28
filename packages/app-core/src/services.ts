@@ -163,6 +163,12 @@ export function makeBaileysFactory(
   authBaseDir: string,
 ): (accountId: string) => Promise<IWhatsAppAdapter> {
   return async (accountId: string) => {
+    // Force `ws` to its pure-JS masking/validation before it is required — the
+    // native bufferutil/utf-8-validate addons break when bundled+packaged
+    // ("bufferUtil.mask is not a function"). Set here so it holds for every
+    // entry point (Electron app and LAN server alike).
+    process.env.WS_NO_BUFFER_UTIL = '1';
+    process.env.WS_NO_UTF_8_VALIDATE = '1';
     const { BaileysWhatsAppAdapter } = await import('@wa-archive/whatsapp/baileys');
     return new BaileysWhatsAppAdapter(accountId, {
       authDir: join(authBaseDir, `account_${accountId}`),

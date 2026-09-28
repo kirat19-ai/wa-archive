@@ -1,3 +1,12 @@
+// The WhatsApp connection uses `ws`, which optionally loads the native
+// `bufferutil` / `utf-8-validate` addons. When the app is bundled+packaged the
+// native interop breaks ("bufferUtil.mask is not a function"), killing the
+// connection. Force ws to use its built-in pure-JS implementations instead —
+// functionally identical, just slightly less CPU-optimal. MUST be set before
+// ws is ever required (it is: Baileys is lazy-loaded only on connect).
+process.env.WS_NO_BUFFER_UTIL = '1';
+process.env.WS_NO_UTF_8_VALIDATE = '1';
+
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
