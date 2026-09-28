@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { ArchiveEngine, EventBus, type MediaSink } from '@wa-archive/archive';
 import { LocalArchiveStorage, MediaManager, type ArchiveStorage } from '@wa-archive/media';
-import { BaileysWhatsAppAdapter, MockWhatsAppAdapter } from '@wa-archive/whatsapp';
+import { MockWhatsAppAdapter } from '@wa-archive/whatsapp';
 import type { AppEventName, IWhatsAppAdapter } from '@wa-archive/shared';
 
 interface AccountRuntime {
@@ -33,7 +33,11 @@ export class AppServices {
   readonly bus = new EventBus();
   private runtimes = new Map<string, AccountRuntime>();
 
-  constructor(private readonly adapterFactory: (accountId: string) => IWhatsAppAdapter) {}
+  constructor(
+    private readonly adapterFactory: (
+      accountId: string,
+    ) => IWhatsAppAdapter | Promise<IWhatsAppAdapter>,
+  ) {}
 
   /**
    * @param storageRoot base folder for archived media (spec §21). Defaults to a
@@ -62,7 +66,7 @@ export class AppServices {
 
   async connectAccount(accountId: string): Promise<void> {
     if (this.runtimes.has(accountId)) return;
-    const adapter = this.adapterFactory(accountId);
+    const adapter = await this.adapterFactory(accountId);
     // Media sink: create the DB row, then enqueue the download (spec §23).
     const mediaSink: MediaSink = ({ accountId: acc, messageRowId, ref, adapter: ad }) => {
       const mediaId = this.repos.media.create(acc, {
@@ -149,11 +153,20 @@ export function mockAdapterFactory(accountId: string): IWhatsAppAdapter {
  * Real factory (Phase 2): one BaileysWhatsAppAdapter per account, each with an
  * isolated auth folder under <authBaseDir>/account_<id>/ (spec §8). Auth state is
  * NEVER shared between accounts.
+ *
+ * Baileys is loaded with a DYNAMIC import so its (heavy, occasionally
+ * native-linked) dependency graph only loads when an account actually connects —
+ * never at app startup. A failure to load surfaces on "Add Account", not as a
+ * silent crash before the window is ever shown.
  */
-export function makeBaileysFactory(authBaseDir: string): (accountId: string) => IWhatsAppAdapter {
-  return (accountId: string) =>
-    new BaileysWhatsAppAdapter(accountId, {
+export function makeBaileysFactory(
+  authBaseDir: string,
+): (accountId: string) => Promise<IWhatsAppAdapter> {
+  return async (accountId: string) => {
+    const { BaileysWhatsAppAdapter } = await import('@wa-archive/whatsapp/baileys');
+    return new BaileysWhatsAppAdapter(accountId, {
       authDir: join(authBaseDir, `account_${accountId}`),
       syncFullHistory: true,
     });
+  };
 }

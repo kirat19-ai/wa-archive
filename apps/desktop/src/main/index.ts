@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron';
 import { AppServices, handlers, makeBaileysFactory, mockAdapterFactory } from '@wa-archive/app-core';
 import { registerIpc } from './ipc.js';
 
@@ -13,17 +13,55 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null;
 let services: AppServices | null = null;
 
+function dataDir(): string {
+  // Local-first: everything lives under the OS user-data dir (spec §40, §65).
+  return join(app.getPath('userData'), 'archive-data');
+}
+
+/** Append a timestamped line to a persistent log the user can send us. */
+function logDir(): string {
+  const dir = join(app.getPath('userData'), 'logs');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function logLine(msg: string): void {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try {
+    appendFileSync(join(logDir(), 'startup.log'), line);
+  } catch {
+    /* logging must never itself crash startup */
+  }
+  // Also to stdout for `--enable-logging` / console runs.
+  console.log(msg);
+}
+
+/** Show the error to the user AND record it, instead of vanishing silently. */
+function reportFatal(where: string, err: unknown): void {
+  const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
+  logLine(`FATAL (${where}): ${detail}`);
+  const logFile = join(app.getPath('userData'), 'logs', 'startup.log');
+  try {
+    dialog.showErrorBox(
+      'WA Archive failed to start',
+      `Something went wrong during startup (${where}).\n\n${detail}\n\n` +
+        `A full log was saved to:\n${logFile}\n\n` +
+        `Please send that file so this can be fixed.`,
+    );
+  } catch {
+    /* dialog may be unavailable very early; the log file still has it */
+  }
+}
+
+// Catch anything that escapes — the whole point is: never fail invisibly.
+process.on('uncaughtException', (err) => reportFatal('uncaughtException', err));
+process.on('unhandledRejection', (err) => reportFatal('unhandledRejection', err));
+
 /** Resolve the generated Drizzle migrations folder in dev and when packaged. */
 function migrationsFolder(): string {
   const packaged = join(process.resourcesPath ?? '', 'drizzle');
   if (app.isPackaged && existsSync(packaged)) return packaged;
   // Dev: apps/desktop -> repo root -> packages/database/drizzle
   return join(app.getAppPath(), '..', '..', 'packages', 'database', 'drizzle');
-}
-
-function dataDir(): string {
-  // Local-first: everything lives under the OS user-data dir (spec §40, §65).
-  return join(app.getPath('userData'), 'archive-data');
 }
 
 function createWindow(): void {
@@ -57,27 +95,42 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // The packaged desktop app connects to real WhatsApp by default (QR on
-  // "Add Account"). Set WA_MOCK=1 to use demo data instead.
-  const useMock = process.env.WA_MOCK === '1';
-  const factory = useMock ? mockAdapterFactory : makeBaileysFactory(join(dataDir(), 'auth'));
-  services = new AppServices(factory);
-  const dbFile = join(dataDir(), 'archive.sqlite');
-  console.log('[wa-archive] data dir:', dataDir());
-  console.log('[wa-archive] migrations:', migrationsFolder());
-  services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'), join(dataDir(), 'auth'));
-  registerIpc(services, () => mainWindow);
+  // Create the window FIRST so the user always sees something, even if backend
+  // init below fails — a visible window + error dialog beats a silent no-op.
+  try {
+    createWindow();
+  } catch (err) {
+    reportFatal('createWindow', err);
+  }
 
-  // Stream archived media: wa-media://media/<accountId>/<mediaId>
-  protocol.handle('wa-media', (request) => {
-    const u = new URL(request.url);
-    const [, accountId, mediaId] = u.pathname.split('/');
-    const file = accountId && mediaId ? handlers.mediaFile(services!, accountId, mediaId) : null;
-    if (!file) return new Response('not found', { status: 404 });
-    return net.fetch(pathToFileURL(file.absolutePath).toString());
-  });
+  try {
+    // The packaged desktop app connects to real WhatsApp by default (QR on
+    // "Add Account"). Set WA_MOCK=1 to use demo data instead. Baileys is loaded
+    // lazily on connect, so a WhatsApp-side problem can't stop startup.
+    const useMock = process.env.WA_MOCK === '1';
+    const factory = useMock ? mockAdapterFactory : makeBaileysFactory(join(dataDir(), 'auth'));
+    services = new AppServices(factory);
+    const dbFile = join(dataDir(), 'archive.sqlite');
+    logLine(`data dir: ${dataDir()}`);
+    logLine(`migrations: ${migrationsFolder()}`);
+    logLine(`mode: ${useMock ? 'mock' : 'real'}`);
+    services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'), join(dataDir(), 'auth'));
+    registerIpc(services, () => mainWindow);
+    logLine('backend ready');
 
-  createWindow();
+    // Stream archived media: wa-media://media/<accountId>/<mediaId>
+    protocol.handle('wa-media', (request) => {
+      const u = new URL(request.url);
+      const [, accountId, mediaId] = u.pathname.split('/');
+      const file = accountId && mediaId ? handlers.mediaFile(services!, accountId, mediaId) : null;
+      if (!file) return new Response('not found', { status: 404 });
+      return net.fetch(pathToFileURL(file.absolutePath).toString());
+    });
+  } catch (err) {
+    // Most likely culprit historically: the native better-sqlite3 binary failing
+    // to load. Surface it instead of dying before a window appears.
+    reportFatal('backend-init', err);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
