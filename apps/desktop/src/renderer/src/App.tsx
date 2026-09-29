@@ -232,8 +232,8 @@ export function App() {
                   <button className={`tab ${pane === 'media' ? 'active' : ''}`} onClick={() => setPane('media')}>
                     Media
                   </button>
-                  {window.wa.imports && chats.length > 0 && (
-                    <button className="tab" title="Import a WhatsApp Export Chat .txt" onClick={() => setShowImport(true)}>
+                  {window.wa.imports && (
+                    <button className="tab" title="Import WhatsApp history (.json bulk or .txt)" onClick={() => setShowImport(true)}>
                       ⇪ Import
                     </button>
                   )}

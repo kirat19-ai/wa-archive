@@ -75,6 +75,11 @@ export function createWebClient(): WaApi {
           text,
           myName,
         }),
+      bulk: (accountId, jsonText) =>
+        post<{ chats: number; imported: number; total: number }>(
+          `/api/accounts/${accountId}/import/bulk`,
+          { json: jsonText },
+        ),
     },
     files: {
       exportChat: (accountId, chatId, format) =>

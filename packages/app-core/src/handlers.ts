@@ -1,4 +1,5 @@
 import {
+  buildBulkImportPlan,
   buildImportPlan,
   createBackup,
   exportChat,
@@ -6,6 +7,7 @@ import {
   inspectBackup,
   parseWhatsAppExport,
   restoreBackup,
+  type ExporterJson,
   type BackupSummary,
   type ExportFormat,
   type ExportResult,
@@ -87,6 +89,34 @@ export const handlers = {
     for (const m of plan.messages) s.repos.messages.insert(accountId, chat.id, m);
     const after = s.repos.messages.list(accountId, chat.id, { limit: 1_000_000 }).length;
     return { imported: after - before, total: plan.messages.length };
+  },
+
+  /**
+   * Bulk import from whatsapp-chat-exporter JSON — ALL chats at once. Creates or
+   * reuses each chat by its JID and inserts every message. Idempotent: message
+   * key ids match live-synced copies, so re-import and overlap don't duplicate.
+   */
+  importBulk(
+    s: AppServices,
+    accountId: string,
+    jsonText: string,
+  ): { chats: number; imported: number; total: number } {
+    let json: ExporterJson;
+    try {
+      json = JSON.parse(jsonText) as ExporterJson;
+    } catch {
+      throw new Error('not valid JSON');
+    }
+    const plans = buildBulkImportPlan(json);
+    const before = s.repos.messages.countByAccount(accountId);
+    let total = 0;
+    for (const { chat, messages } of plans) {
+      const chatRowId = s.repos.chats.upsert(accountId, chat);
+      for (const m of messages) s.repos.messages.insert(accountId, chatRowId, m);
+      total += messages.length;
+    }
+    const after = s.repos.messages.countByAccount(accountId);
+    return { chats: plans.length, imported: after - before, total };
   },
   listMessages(
     s: AppServices,

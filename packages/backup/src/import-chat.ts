@@ -180,3 +180,121 @@ export function buildImportPlan(
 
   return { chat, messages };
 }
+
+// ── Bulk import from whatsapp-chat-exporter JSON (all chats at once) ──────────
+// Schema: { "<jid>": { name, type, messages: { "<id>": { from_me, timestamp,
+//   media, data, meta, sender, caption, key_id, mime, sticker } } } }
+
+export interface ExporterMessage {
+  from_me?: boolean;
+  timestamp?: number; // seconds
+  media?: boolean;
+  data?: string | null;
+  meta?: boolean; // system/notice line
+  sender?: string | null;
+  caption?: string | null;
+  key_id?: string | number | null;
+  mime?: string | null;
+  sticker?: boolean;
+}
+export interface ExporterChat {
+  name?: string | null;
+  type?: string;
+  messages?: Record<string, ExporterMessage>;
+}
+export type ExporterJson = Record<string, ExporterChat>;
+
+function mediaTypeForMime(mime: string | null | undefined, sticker?: boolean): MessageType {
+  if (sticker) return MessageType.STICKER;
+  const m = (mime ?? '').toLowerCase();
+  if (m.startsWith('image/')) return MessageType.IMAGE;
+  if (m.startsWith('video/')) return MessageType.VIDEO;
+  if (m.startsWith('audio/')) return MessageType.AUDIO;
+  return MessageType.DOCUMENT;
+}
+
+/** Detect whether a file's text is the exporter JSON (vs a plain .txt export). */
+export function looksLikeExporterJson(text: string): boolean {
+  const t = text.trimStart();
+  if (!t.startsWith('{')) return false;
+  try {
+    const obj = JSON.parse(t) as Record<string, unknown>;
+    return Object.values(obj).some(
+      (v) => v && typeof v === 'object' && 'messages' in (v as object),
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface BulkChatPlan {
+  chat: NormalizedChat;
+  messages: NormalizedMessage[];
+}
+
+/** Turn exporter JSON into per-chat normalized plans ready for the repositories. */
+export function buildBulkImportPlan(json: ExporterJson): BulkChatPlan[] {
+  const plans: BulkChatPlan[] = [];
+
+  for (const [jid, chat] of Object.entries(json)) {
+    if (!chat || typeof chat !== 'object' || !chat.messages) continue;
+    if (jid.includes('status@broadcast')) continue; // skip Status updates
+    const isGroup = jid.endsWith('@g.us');
+    const phoneNumber = !isGroup && jid.includes('@') ? `+${jid.split('@')[0]}` : null;
+
+    const messages: NormalizedMessage[] = [];
+    let lastTs: number | null = null;
+
+    for (const [id, msg] of Object.entries(chat.messages)) {
+      if (!msg || msg.meta) continue; // skip system notices
+      const tsSec = typeof msg.timestamp === 'number' ? msg.timestamp : 0;
+      if (!tsSec) continue;
+      const timestamp = Math.round(tsSec * 1000);
+      const isMedia = Boolean(msg.media) || Boolean(msg.sticker);
+      const type = isMedia ? mediaTypeForMime(msg.mime, msg.sticker) : MessageType.TEXT;
+      const body = msg.data ?? null;
+      // Prefer WhatsApp's real key id so imports dedup against live-synced copies.
+      const wamid =
+        msg.key_id != null && String(msg.key_id).length > 0
+          ? `${String(msg.key_id)}`
+          : `import_${createHash('sha256').update(`${jid}|${id}|${timestamp}`).digest('hex').slice(0, 32)}`;
+
+      messages.push({
+        whatsappMessageId: wamid,
+        chatId: jid,
+        senderId: null,
+        participantId: null,
+        timestamp,
+        direction: msg.from_me ? MessageDirection.OUTGOING : MessageDirection.INCOMING,
+        messageType: type,
+        text: isMedia ? null : body,
+        caption: msg.caption ?? (isMedia ? body : null),
+        quotedMessageId: null,
+        forwarded: false,
+        media: null,
+        rawMetadata: { imported: true, sender: msg.sender ?? null },
+      });
+      if (timestamp > (lastTs ?? 0)) lastTs = timestamp;
+    }
+
+    if (messages.length === 0) continue;
+
+    plans.push({
+      chat: {
+        whatsappChatId: jid,
+        chatType: isGroup ? ChatType.GROUP : ChatType.INDIVIDUAL,
+        name: chat.name ?? null,
+        phoneNumber,
+        profilePhotoUrl: null,
+        muted: false,
+        pinned: false,
+        archived: false,
+        lastMessageAt: lastTs,
+        lastMessagePreview: null,
+      },
+      messages,
+    });
+  }
+
+  return plans;
+}

@@ -303,6 +303,18 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         sessionService.audit('chat_imported', { accountId, detail: result });
         return json(res, 200, result);
       }
+      // Bulk import from whatsapp-chat-exporter JSON (all chats at once).
+      if (seg[3] === 'import' && seg[4] === 'bulk' && method === 'POST') {
+        const body = await readJson(req);
+        if (!body.json) return json(res, 400, { error: 'json required' });
+        try {
+          const result = handlers.importBulk(services, accountId, String(body.json));
+          sessionService.audit('bulk_imported', { accountId, detail: result });
+          return json(res, 200, result);
+        } catch (e) {
+          return json(res, 400, { error: String((e as Error).message) });
+        }
+      }
       return json(res, 404, { error: 'unknown account endpoint' });
     }
 
