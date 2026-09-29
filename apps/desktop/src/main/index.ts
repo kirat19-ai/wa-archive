@@ -1,12 +1,6 @@
-// The WhatsApp connection uses `ws`, which optionally loads the native
-// `bufferutil` / `utf-8-validate` addons. When the app is bundled+packaged the
-// native interop breaks ("bufferUtil.mask is not a function"), killing the
-// connection. Force ws to use its built-in pure-JS implementations instead —
-// functionally identical, just slightly less CPU-optimal. MUST be set before
-// ws is ever required.
-process.env.WS_NO_BUFFER_UTIL = '1';
-process.env.WS_NO_UTF_8_VALIDATE = '1';
-
+// FIRST import — sets WS_NO_BUFFER_UTIL before any module that pulls in `ws`
+// (the embedded server + WhatsApp client) is evaluated. Do not move below.
+import './ws-env.js';
 import type { Server } from 'node:http';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
