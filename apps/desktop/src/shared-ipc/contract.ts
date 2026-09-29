@@ -56,6 +56,16 @@ export interface WaApi {
     inspect(base64: string, password: string): Promise<BackupSummary>;
     restore(base64: string, password: string, accountIds?: string[]): Promise<{ restored: string[] }>;
   };
+  /** Import a WhatsApp "Export Chat" .txt into a chat (full history, spec §71). */
+  imports?: {
+    preview(accountId: string, text: string): Promise<{ senders: string[]; count: number }>;
+    run(
+      accountId: string,
+      chatId: string,
+      text: string,
+      myName: string | null,
+    ): Promise<{ imported: number; total: number }>;
+  };
   /**
    * Present only over the LAN transport (spec §44-48). Absent in Electron, where
    * the local user is trusted and no login is required.

@@ -284,6 +284,25 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
           return json(res, 404, { error: String((e as Error).message) });
         }
       }
+      // Preview a WhatsApp export .txt (detected senders + count).
+      if (seg[3] === 'import' && seg[4] === 'preview' && method === 'POST') {
+        const body = await readJson(req);
+        return json(res, 200, handlers.importPreview(String(body.text ?? '')));
+      }
+      // Import a WhatsApp export .txt into a chat (spec §71 full history).
+      if (seg[3] === 'import' && !seg[4] && method === 'POST') {
+        const body = await readJson(req);
+        if (!body.chatId || !body.text) return json(res, 400, { error: 'chatId and text required' });
+        const result = handlers.importChat(
+          services,
+          accountId,
+          String(body.chatId),
+          String(body.text),
+          body.myName ? String(body.myName) : null,
+        );
+        sessionService.audit('chat_imported', { accountId, detail: result });
+        return json(res, 200, result);
+      }
       return json(res, 404, { error: 'unknown account endpoint' });
     }
 

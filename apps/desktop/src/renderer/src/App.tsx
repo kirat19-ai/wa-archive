@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard.js';
 import { ChatList } from './components/ChatList.js';
 import { MessageThread } from './components/MessageThread.js';
 import { AddAccountModal } from './components/AddAccountModal.js';
+import { ImportChatModal } from './components/ImportChatModal.js';
 import { ConnectModal } from './components/ConnectModal.js';
 import { Lightbox } from './components/Lightbox.js';
 import { LoginScreen } from './components/LoginScreen.js';
@@ -41,6 +42,7 @@ export function App() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [pane, setPane] = useState<'chats' | 'media'>('chats');
   const [showDevices, setShowDevices] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   // null = still checking; over the LAN this drives the login gate (spec §44).
   const [auth, setAuth] = useState<AuthState | null>(null);
 
@@ -223,13 +225,18 @@ export function App() {
                 </span>
               </div>
               {view !== 'ALL' && (
-                <div className="tabs" style={{ padding: 0 }}>
+                <div className="tabs" style={{ padding: 0, gap: 6 }}>
                   <button className={`tab ${pane === 'chats' ? 'active' : ''}`} onClick={() => setPane('chats')}>
                     Chats
                   </button>
                   <button className={`tab ${pane === 'media' ? 'active' : ''}`} onClick={() => setPane('media')}>
                     Media
                   </button>
+                  {window.wa.imports && chats.length > 0 && (
+                    <button className="tab" title="Import a WhatsApp Export Chat .txt" onClick={() => setShowImport(true)}>
+                      ⇪ Import
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -310,6 +317,18 @@ export function App() {
 
       {modal && (
         <AddAccountModal onCancel={() => setModal(false)} onCreate={createAccount} busy={busy} />
+      )}
+
+      {showImport && accountId && (
+        <ImportChatModal
+          accountId={accountId}
+          chats={chats}
+          onClose={() => setShowImport(false)}
+          onDone={() => {
+            if (activeChat) void openChat(activeChat);
+            void refreshAccounts();
+          }}
+        />
       )}
 
       {connectingId && (

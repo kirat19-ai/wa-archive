@@ -66,6 +66,16 @@ export function createWebClient(): WaApi {
       list: (accountId, type) => get<MediaDTO[]>(`/api/accounts/${accountId}/media?${q({ type })}`),
       url: (accountId, mediaId) => `/api/accounts/${accountId}/media/${mediaId}/file`,
     },
+    imports: {
+      preview: (accountId, text) =>
+        post<{ senders: string[]; count: number }>(`/api/accounts/${accountId}/import/preview`, { text }),
+      run: (accountId, chatId, text, myName) =>
+        post<{ imported: number; total: number }>(`/api/accounts/${accountId}/import`, {
+          chatId,
+          text,
+          myName,
+        }),
+    },
     files: {
       exportChat: (accountId, chatId, format) =>
         fetch(`/api/accounts/${accountId}/chats/${chatId}/export?format=${format}`, {

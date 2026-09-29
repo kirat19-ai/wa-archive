@@ -1,13 +1,16 @@
 import {
+  buildImportPlan,
   createBackup,
   exportChat,
   exportChatBundle,
   inspectBackup,
+  parseWhatsAppExport,
   restoreBackup,
   type BackupSummary,
   type ExportFormat,
   type ExportResult,
 } from '@wa-archive/backup';
+import { ChatType } from '@wa-archive/shared';
 import type { AccountDTO, ChatDTO, MediaDTO, MessageDTO, SearchHitDTO } from './dto.js';
 import type { AppServices } from './services.js';
 
@@ -47,6 +50,43 @@ export const handlers = {
   },
   listDeletedChats(s: AppServices, accountId: string): ChatDTO[] {
     return s.repos.chats.listDeleted(accountId).map(toChatDTO);
+  },
+
+  /** Preview a WhatsApp export .txt: detected sender names + message count. */
+  importPreview(text: string): { senders: string[]; count: number } {
+    const parsed = parseWhatsAppExport(text);
+    return { senders: parsed.senders, count: parsed.lines.filter((l) => !l.isSystem).length };
+  },
+
+  /**
+   * Import a WhatsApp "Export Chat" .txt into an existing chat (spec §71 full
+   * history). `myName` is the sender name that is the archive owner (its lines
+   * become OUTGOING). Idempotent: re-importing the same file adds nothing new.
+   */
+  importChat(
+    s: AppServices,
+    accountId: string,
+    chatId: string,
+    text: string,
+    myName: string | null,
+  ): { imported: number; total: number } {
+    const chat = s.repos.chats.get(accountId, chatId);
+    if (!chat) throw new Error('chat not found');
+    const before = s.repos.messages.list(accountId, chat.id, { limit: 1_000_000 }).length;
+    const parsed = parseWhatsAppExport(text);
+    const plan = buildImportPlan(
+      parsed,
+      {
+        whatsappChatId: chat.whatsappChatId,
+        name: chat.name,
+        phoneNumber: chat.phoneNumber,
+        chatType: chat.chatType as ChatType,
+      },
+      myName,
+    );
+    for (const m of plan.messages) s.repos.messages.insert(accountId, chat.id, m);
+    const after = s.repos.messages.list(accountId, chat.id, { limit: 1_000_000 }).length;
+    return { imported: after - before, total: plan.messages.length };
   },
   listMessages(
     s: AppServices,
