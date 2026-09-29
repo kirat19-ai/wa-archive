@@ -69,8 +69,9 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
     const accountId = (payload as { accountId?: string } | null)?.accountId;
     for (const client of wss.clients) {
       const ctx = (client as { _ctx?: SessionContext | null })._ctx ?? null;
-      // Only deliver an account's events to sessions authorized for it (spec §48).
-      if (accountId && ctx && !ctx.isAdmin && ctx.accountScope !== accountId) continue;
+      // Only deliver an account's events to the session scoped to THAT profile
+      // (spec §45/§48). Admin sessions do not receive profile data events.
+      if (accountId && ctx?.accountScope !== accountId) continue;
       if (client.readyState === client.OPEN) client.send(frame);
     }
   });
@@ -212,6 +213,25 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         }
         return json(res, 200, { ok: true });
       }
+      // Set/change this profile's password — admin (management), not data access.
+      if (seg[3] === 'password' && method === 'POST') {
+        if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
+        const body = await readJson(req);
+        if (!body.password) return json(res, 400, { error: 'password required' });
+        await sessionService.setAccountPassword(accountId, body.password);
+        return json(res, 200, { ok: true });
+      }
+
+      // ── PRIVACY GATE (spec §45): everything below reads this profile's
+      // actual data (chats, messages, media, search, export). It requires a
+      // session scoped to THIS profile — the admin/master password does NOT
+      // grant it. No one can read another profile's chats. ──────────────────
+      if (ctx?.accountScope !== accountId) {
+        return json(res, 403, {
+          error: 'This profile is private. Log in with its own password to view its chats.',
+        });
+      }
+
       if (seg[3] === 'chats' && !seg[4] && method === 'GET') {
         const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
         return json(res, 200, handlers.listChats(services, accountId, { includeDeleted }));
@@ -264,20 +284,13 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
           return json(res, 404, { error: String((e as Error).message) });
         }
       }
-      if (seg[3] === 'password' && method === 'POST') {
-        if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
-        const body = await readJson(req);
-        if (!body.password) return json(res, 400, { error: 'password required' });
-        await sessionService.setAccountPassword(accountId, body.password);
-        return json(res, 200, { ok: true });
-      }
       return json(res, 404, { error: 'unknown account endpoint' });
     }
 
-    // Cross-account search: admin → all; account session → just its own (spec §31).
+    // Search is private per profile: only a profile-scoped session searches its
+    // own messages. Admin has no cross-account search (spec §45 privacy).
     if (p === '/api/search' && method === 'GET') {
       const query = url.searchParams.get('query') ?? '';
-      if (ctx?.isAdmin) return json(res, 200, handlers.searchAll(services, query));
       if (ctx?.accountScope) return json(res, 200, handlers.searchAccount(services, ctx.accountScope, query));
       return json(res, 200, []);
     }
