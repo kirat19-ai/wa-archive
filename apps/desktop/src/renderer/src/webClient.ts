@@ -124,6 +124,8 @@ export function createWebClient(): WaApi {
       logout: async () => {
         await postRaw('/api/auth/logout', {});
       },
+      needsSetup: async () => (await get<{ needsSetup: boolean }>('/api/auth/needs-setup')).needsSetup,
+      setup: async (password) => (await postRaw('/api/auth/setup', { password })).ok,
     },
     onEvent: (cb) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';

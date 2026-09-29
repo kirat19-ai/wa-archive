@@ -3,127 +3,107 @@
 // native interop breaks ("bufferUtil.mask is not a function"), killing the
 // connection. Force ws to use its built-in pure-JS implementations instead —
 // functionally identical, just slightly less CPU-optimal. MUST be set before
-// ws is ever required (it is: Baileys is lazy-loaded only on connect).
+// ws is ever required.
 process.env.WS_NO_BUFFER_UTIL = '1';
 process.env.WS_NO_UTF_8_VALIDATE = '1';
 
+import type { Server } from 'node:http';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron';
-import { AppServices, handlers, makeBaileysFactory, mockAdapterFactory } from '@wa-archive/app-core';
-import { registerIpc } from './ipc.js';
+import { fileURLToPath } from 'node:url';
+import { app, BrowserWindow, dialog, shell } from 'electron';
+import { AppServices, makeBaileysFactory } from '@wa-archive/app-core';
+import { SessionService } from '@wa-archive/auth';
+import { createArchiveServer } from '@wa-archive/server';
 
-// The main process is bundled as an ES module ("type": "module"), where
-// __dirname does not exist. Derive it from import.meta.url so preload/renderer
-// paths resolve when packaged (this was the original silent-startup crash).
 const moduleDir = dirname(fileURLToPath(import.meta.url));
-
-// Custom scheme to stream archived media into <img>/<video>/<a> (spec §38).
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'wa-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
-]);
 
 let mainWindow: BrowserWindow | null = null;
 let services: AppServices | null = null;
+let httpServer: Server | null = null;
 
 function dataDir(): string {
-  // Local-first: everything lives under the OS user-data dir (spec §40, §65).
   return join(app.getPath('userData'), 'archive-data');
 }
-
-/** Append a timestamped line to a persistent log the user can send us. */
 function logDir(): string {
   const dir = join(app.getPath('userData'), 'logs');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
 function logLine(msg: string): void {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
   try {
-    appendFileSync(join(logDir(), 'startup.log'), line);
+    appendFileSync(join(logDir(), 'startup.log'), `[${new Date().toISOString()}] ${msg}\n`);
   } catch {
     /* logging must never itself crash startup */
   }
-  // Also to stdout for `--enable-logging` / console runs.
   console.log(msg);
 }
 
-// True only while the backend is initializing. Once the app is up, a stray
-// async error (e.g. a dropped WhatsApp socket) must NOT be reported as a
-// startup failure — it's background noise, and the app keeps running.
+// True only while the backend is initializing. Once the app is up, stray async
+// errors (dropped WhatsApp sockets, aborted fetches) are background noise.
 let startupPhase = true;
 
-/**
- * Only genuine startup failures get the blocking "failed to start" dialog.
- * Everything else is logged. Never exits the process — a background network
- * error must not take the running app down.
- */
 function reportFatal(where: string, err: unknown): void {
   const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
   logLine(`ERROR (${where})${startupPhase ? ' [startup]' : ' [background]'}: ${detail}`);
-  if (!startupPhase) return; // app already running — log only, no scary dialog
+  if (!startupPhase) return;
   const logFile = join(app.getPath('userData'), 'logs', 'startup.log');
   try {
     dialog.showErrorBox(
       'WA Archive failed to start',
       `Something went wrong during startup (${where}).\n\n${detail}\n\n` +
-        `A full log was saved to:\n${logFile}\n\n` +
-        `Please send that file so this can be fixed.`,
+        `A full log was saved to:\n${logFile}\n\nPlease send that file so this can be fixed.`,
     );
   } catch {
     /* dialog may be unavailable very early; the log file still has it */
   }
 }
 
-/** Benign async errors from network teardown (undici keep-alive sockets closing,
- * WhatsApp reconnects, aborted fetches). These are expected and must be ignored
- * so the app stays up and quiet. */
 function isBenignNetworkError(err: unknown): boolean {
   const msg = err instanceof Error ? `${err.message} ${(err as { code?: string }).code ?? ''}` : String(err);
   return /terminated|aborted|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|UND_ERR|other side closed|EPIPE/i.test(
     msg,
   );
 }
-
-// Catch anything that escapes — but never fail invisibly AND never over-react.
 process.on('uncaughtException', (err) => {
-  if (isBenignNetworkError(err)) {
-    logLine(`ignored network error (uncaughtException): ${err instanceof Error ? err.message : String(err)}`);
-    return;
-  }
+  if (isBenignNetworkError(err)) return void logLine(`ignored network error: ${String(err)}`);
   reportFatal('uncaughtException', err);
 });
 process.on('unhandledRejection', (err) => {
-  if (isBenignNetworkError(err)) {
-    logLine(`ignored network rejection: ${err instanceof Error ? err.message : String(err)}`);
-    return;
-  }
+  if (isBenignNetworkError(err)) return void logLine(`ignored network rejection: ${String(err)}`);
   reportFatal('unhandledRejection', err);
 });
 
-/** Resolve the generated Drizzle migrations folder in dev and when packaged. */
 function migrationsFolder(): string {
   const packaged = join(process.resourcesPath ?? '', 'drizzle');
   if (app.isPackaged && existsSync(packaged)) return packaged;
-  // Dev: apps/desktop -> repo root -> packages/database/drizzle
   return join(app.getAppPath(), '..', '..', 'packages', 'database', 'drizzle');
 }
 
-/**
- * electron-vite emits the preload as index.mjs (ESM, because "type": "module")
- * but has emitted index.js in other setups. Point at whichever actually exists —
- * a wrong path silently disables the preload, leaving the renderer with no
- * window.wa bridge (it then falls back to a LAN server that isn't there and
- * spins forever).
- */
-function preloadPath(): string {
-  const mjs = join(moduleDir, '../preload/index.mjs');
-  const js = join(moduleDir, '../preload/index.js');
-  return existsSync(mjs) ? mjs : js;
+/** Built web UI (index.html + assets) served to the window and to phones. */
+function webRoot(): string {
+  return join(moduleDir, '../web');
 }
 
-function createWindow(): void {
+/** Try to listen on the first free port from a small list (LAN-wide bind). */
+function listenWithFallback(server: Server, ports: number[]): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const tryPort = (i: number): void => {
+      if (i >= ports.length) return reject(new Error('no free port'));
+      const port = ports[i]!;
+      server.once('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') tryPort(i + 1);
+        else reject(err);
+      });
+      // 0.0.0.0 → reachable from the whole Wi-Fi (private-range enforced + auth
+      // required in the server). Loopback still works for the desktop window.
+      server.listen(port, '0.0.0.0', () => resolve(port));
+    };
+    tryPort(0);
+  });
+}
+
+function createWindow(port: number): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -132,72 +112,61 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#0b141a',
     title: 'WA Archive',
-    webPreferences: {
-      preload: preloadPath(),
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+  // External links open in the real browser, not inside the app window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
-
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void mainWindow.loadFile(join(moduleDir, '../renderer/index.html'));
-  }
+  void mainWindow.loadURL(`http://127.0.0.1:${port}`);
 }
 
-app.whenReady().then(() => {
-  // Create the window FIRST so the user always sees something, even if backend
-  // init below fails — a visible window + error dialog beats a silent no-op.
+app.whenReady().then(async () => {
   try {
-    createWindow();
-  } catch (err) {
-    reportFatal('createWindow', err);
-  }
-
-  try {
-    // The packaged desktop app connects to real WhatsApp by default (QR on
-    // "Add Account"). Set WA_MOCK=1 to use demo data instead. Baileys is loaded
-    // lazily on connect, so a WhatsApp-side problem can't stop startup.
-    const useMock = process.env.WA_MOCK === '1';
-    const factory = useMock ? mockAdapterFactory : makeBaileysFactory(join(dataDir(), 'auth'));
+    const factory = makeBaileysFactory(join(dataDir(), 'auth'));
     services = new AppServices(factory);
     const dbFile = join(dataDir(), 'archive.sqlite');
     logLine(`data dir: ${dataDir()}`);
-    logLine(`migrations: ${migrationsFolder()}`);
-    logLine(`mode: ${useMock ? 'mock' : 'real'}`);
     services.init(dbFile, migrationsFolder(), join(dataDir(), 'archive'), join(dataDir(), 'auth'));
-    registerIpc(services, () => mainWindow);
+    const sessions = new SessionService(services.db, services.repos);
     logLine('backend ready');
 
-    // Stream archived media: wa-media://media/<accountId>/<mediaId>
-    protocol.handle('wa-media', (request) => {
-      const u = new URL(request.url);
-      const [, accountId, mediaId] = u.pathname.split('/');
-      const file = accountId && mediaId ? handlers.mediaFile(services!, accountId, mediaId) : null;
-      if (!file) return new Response('not found', { status: 404 });
-      return net.fetch(pathToFileURL(file.absolutePath).toString());
+    // Reconnect previously-linked accounts so archiving resumes on launch.
+    for (const acc of services.repos.accounts.list()) {
+      services
+        .connectAccount(acc.id)
+        .catch((e) => logLine(`reconnect ${acc.id} failed: ${String(e)}`));
+    }
+
+    // Passed by reference; the /api/lan/info handler reads it at request time,
+    // so updating .port after we learn the real bound port keeps the QR correct.
+    const lan = { host: '0.0.0.0', port: 8787, https: false };
+    httpServer = createArchiveServer({
+      services,
+      sessionService: sessions,
+      webRoot: webRoot(),
+      requireAuth: true, // password required in the app AND on the network
+      secureCookies: false, // plain HTTP on the LAN
+      lan,
     });
+    const port = await listenWithFallback(httpServer, [8787, 8788, 8799, 8080, 8181]);
+    lan.port = port;
+    logLine(`server listening on 0.0.0.0:${port}`);
+
+    createWindow(port);
   } catch (err) {
-    // Most likely culprit historically: the native better-sqlite3 binary failing
-    // to load. Surface it instead of dying before a window appears.
     reportFatal('backend-init', err);
   } finally {
-    // Startup is over. From here on, stray async errors (dropped WhatsApp
-    // sockets, aborted fetches) are logged as background noise, never shown as
-    // a "failed to start" dialog over the running app.
     startupPhase = false;
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0 && httpServer) {
+      const addr = httpServer.address();
+      if (addr && typeof addr === 'object') createWindow(addr.port);
+    }
   });
 });
 
@@ -205,4 +174,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => services?.shutdown());
+app.on('before-quit', () => {
+  try {
+    httpServer?.close();
+  } catch {
+    /* ignore */
+  }
+  services?.shutdown();
+});

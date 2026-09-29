@@ -141,6 +141,22 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
       clearSessionCookie(res);
       return json(res, 200, { ok: true });
     }
+    // First-run: is a master (admin) password set yet?
+    if (p === '/api/auth/needs-setup' && method === 'GET') {
+      return json(res, 200, { needsSetup: !sessionService.hasAdmin() });
+    }
+    // First-run: create the master password. Only allowed while no admin exists;
+    // logs the caller straight in as admin so they can add profiles.
+    if (p === '/api/auth/setup' && method === 'POST') {
+      if (sessionService.hasAdmin()) return json(res, 403, { error: 'already set up' });
+      const body = await readJson(req);
+      const password = String(body.password ?? '');
+      if (password.length < 6) return json(res, 400, { error: 'password too short (min 6)' });
+      await sessionService.ensureAdmin('admin', password);
+      const result = await sessionService.loginAdmin('admin', password, { ...dev });
+      if (result) setSessionCookie(res, result.token, result.expiresAt, secure);
+      return json(res, 200, { ok: true, isAdmin: true });
+    }
 
     // ── everything below requires a session ───────────────────────────────
     if (requireAuth && !ctx) return json(res, 401, { error: 'authentication required' });
@@ -156,10 +172,15 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
       if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
       const body = await readJson(req);
       if (!body.displayName) return json(res, 400, { error: 'displayName required' });
-      return json(res, 200, await handlers.createAccount(services, {
+      const created = await handlers.createAccount(services, {
         displayName: body.displayName,
         phoneNumber: body.phoneNumber,
-      }));
+      });
+      // Optional per-profile password set at creation time (spec §45).
+      if (body.password && String(body.password).length >= 6) {
+        await sessionService.setAccountPassword(created.id, String(body.password));
+      }
+      return json(res, 200, created);
     }
 
     // ── account-scoped routes: enforce authorization (spec §48) ───────────

@@ -142,7 +142,7 @@ export function App() {
     };
   }, [query, view, accountId]);
 
-  const createAccount = async (input: { displayName: string; phoneNumber?: string }) => {
+  const createAccount = async (input: { displayName: string; phoneNumber?: string; password?: string }) => {
     setBusy(true);
     try {
       const acc = await window.wa.accounts.create(input);

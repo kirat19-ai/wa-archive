@@ -13,6 +13,8 @@ export default defineConfig({
           '@wa-archive/archive',
           '@wa-archive/whatsapp',
           '@wa-archive/app-core',
+          '@wa-archive/auth',
+          '@wa-archive/server',
         ],
       }),
     ],

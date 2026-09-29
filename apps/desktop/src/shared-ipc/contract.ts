@@ -20,7 +20,7 @@ export type ExportFmt = 'txt' | 'json' | 'html' | 'csv';
 export interface WaApi {
   accounts: {
     list(): Promise<AccountDTO[]>;
-    create(input: { displayName: string; phoneNumber?: string }): Promise<AccountDTO>;
+    create(input: { displayName: string; phoneNumber?: string; password?: string }): Promise<AccountDTO>;
     connect(accountId: string): Promise<void>;
     disconnect(accountId: string): Promise<void>;
     /** Remove connection but keep the archive, or permanently delete it (spec §94). */
@@ -79,6 +79,10 @@ export interface AuthApi {
   loginAccount(accountId: string, password: string, remember?: boolean): Promise<boolean>;
   loginAdmin(username: string, password: string, remember?: boolean): Promise<boolean>;
   logout(): Promise<void>;
+  /** First-run: is a master password not yet set? */
+  needsSetup(): Promise<boolean>;
+  /** First-run: create the master password (and log in as admin). */
+  setup(password: string): Promise<boolean>;
 }
 
 export interface LanInfoDTO {

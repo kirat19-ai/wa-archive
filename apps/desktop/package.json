@@ -18,7 +18,9 @@
   "dependencies": {
     "@wa-archive/app-core": "*",
     "@wa-archive/archive": "*",
+    "@wa-archive/auth": "*",
     "@wa-archive/database": "*",
+    "@wa-archive/server": "*",
     "@wa-archive/shared": "*",
     "@wa-archive/whatsapp": "*",
     "better-sqlite3": "13.0.3"
