@@ -49,10 +49,20 @@ function logLine(msg: string): void {
   console.log(msg);
 }
 
-/** Show the error to the user AND record it, instead of vanishing silently. */
+// True only while the backend is initializing. Once the app is up, a stray
+// async error (e.g. a dropped WhatsApp socket) must NOT be reported as a
+// startup failure — it's background noise, and the app keeps running.
+let startupPhase = true;
+
+/**
+ * Only genuine startup failures get the blocking "failed to start" dialog.
+ * Everything else is logged. Never exits the process — a background network
+ * error must not take the running app down.
+ */
 function reportFatal(where: string, err: unknown): void {
   const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
-  logLine(`FATAL (${where}): ${detail}`);
+  logLine(`ERROR (${where})${startupPhase ? ' [startup]' : ' [background]'}: ${detail}`);
+  if (!startupPhase) return; // app already running — log only, no scary dialog
   const logFile = join(app.getPath('userData'), 'logs', 'startup.log');
   try {
     dialog.showErrorBox(
@@ -66,9 +76,31 @@ function reportFatal(where: string, err: unknown): void {
   }
 }
 
-// Catch anything that escapes — the whole point is: never fail invisibly.
-process.on('uncaughtException', (err) => reportFatal('uncaughtException', err));
-process.on('unhandledRejection', (err) => reportFatal('unhandledRejection', err));
+/** Benign async errors from network teardown (undici keep-alive sockets closing,
+ * WhatsApp reconnects, aborted fetches). These are expected and must be ignored
+ * so the app stays up and quiet. */
+function isBenignNetworkError(err: unknown): boolean {
+  const msg = err instanceof Error ? `${err.message} ${(err as { code?: string }).code ?? ''}` : String(err);
+  return /terminated|aborted|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|UND_ERR|other side closed|EPIPE/i.test(
+    msg,
+  );
+}
+
+// Catch anything that escapes — but never fail invisibly AND never over-react.
+process.on('uncaughtException', (err) => {
+  if (isBenignNetworkError(err)) {
+    logLine(`ignored network error (uncaughtException): ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  reportFatal('uncaughtException', err);
+});
+process.on('unhandledRejection', (err) => {
+  if (isBenignNetworkError(err)) {
+    logLine(`ignored network rejection: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  reportFatal('unhandledRejection', err);
+});
 
 /** Resolve the generated Drizzle migrations folder in dev and when packaged. */
 function migrationsFolder(): string {
@@ -157,6 +189,11 @@ app.whenReady().then(() => {
     // Most likely culprit historically: the native better-sqlite3 binary failing
     // to load. Surface it instead of dying before a window appears.
     reportFatal('backend-init', err);
+  } finally {
+    // Startup is over. From here on, stray async errors (dropped WhatsApp
+    // sockets, aborted fetches) are logged as background noise, never shown as
+    // a "failed to start" dialog over the running app.
+    startupPhase = false;
   }
 
   app.on('activate', () => {
