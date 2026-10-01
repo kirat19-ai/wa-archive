@@ -110,11 +110,16 @@ export const handlers = {
     const plans = buildBulkImportPlan(json);
     const before = s.repos.messages.countByAccount(accountId);
     let total = 0;
-    for (const { chat, messages } of plans) {
-      const chatRowId = s.repos.chats.upsert(accountId, chat);
-      for (const m of messages) s.repos.messages.insert(accountId, chatRowId, m);
-      total += messages.length;
-    }
+    // Wrap the whole import in ONE transaction — tens of thousands of inserts
+    // run in seconds instead of minutes (one fsync instead of per-row).
+    const tx = s.db.$sqlite.transaction(() => {
+      for (const { chat, messages } of plans) {
+        const chatRowId = s.repos.chats.upsert(accountId, chat);
+        for (const m of messages) s.repos.messages.insert(accountId, chatRowId, m);
+        total += messages.length;
+      }
+    });
+    tx();
     const after = s.repos.messages.countByAccount(accountId);
     return { chats: plans.length, imported: after - before, total };
   },
