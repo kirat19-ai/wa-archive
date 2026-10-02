@@ -67,11 +67,12 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
   services.bus.onAny((event: AppEventName, payload) => {
     const frame = JSON.stringify({ event, payload });
     const accountId = (payload as { accountId?: string } | null)?.accountId;
+    // Connection/QR/status is a MANAGEMENT event (no chat content) — admin needs
+    // it to drive pairing. Chat data events stay private to the owning profile.
+    const isConnEvent = event === 'account.connection';
     for (const client of wss.clients) {
       const ctx = (client as { _ctx?: SessionContext | null })._ctx ?? null;
-      // Only deliver an account's events to the session scoped to THAT profile
-      // (spec §45/§48). Admin sessions do not receive profile data events.
-      if (accountId && ctx?.accountScope !== accountId) continue;
+      if (accountId && ctx?.accountScope !== accountId && !(isConnEvent && ctx?.isAdmin)) continue;
       if (client.readyState === client.OPEN) client.send(frame);
     }
   });
@@ -190,13 +191,13 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
       if (!sessionService.canAccessAccount(ctx, accountId)) {
         return json(res, 403, { error: 'forbidden' });
       }
+      // connect/disconnect: admin OR the owning profile (the outer gate already
+      // allowed only those two through). A profile manages its own link + QR.
       if (seg[3] === 'connect' && method === 'POST') {
-        if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
         await handlers.connectAccount(services, accountId);
         return json(res, 200, { ok: true });
       }
       if (seg[3] === 'disconnect' && method === 'POST') {
-        if (!ctx?.isAdmin) return json(res, 403, { error: 'admin only' });
         await handlers.disconnectAccount(services, accountId);
         return json(res, 200, { ok: true });
       }
@@ -220,6 +221,37 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
         if (!body.password) return json(res, 400, { error: 'password required' });
         await sessionService.setAccountPassword(accountId, body.password);
         return json(res, 200, { ok: true });
+      }
+
+      // Importing is a WRITE (it never reveals existing chats), so admin OR the
+      // owning profile may do it — the outer gate already allowed only those two.
+      if (seg[3] === 'import' && seg[4] === 'preview' && method === 'POST') {
+        const body = await readJson(req);
+        return json(res, 200, handlers.importPreview(String(body.text ?? '')));
+      }
+      if (seg[3] === 'import' && !seg[4] && method === 'POST') {
+        const body = await readJson(req);
+        if (!body.chatId || !body.text) return json(res, 400, { error: 'chatId and text required' });
+        const result = handlers.importChat(
+          services,
+          accountId,
+          String(body.chatId),
+          String(body.text),
+          body.myName ? String(body.myName) : null,
+        );
+        sessionService.audit('chat_imported', { accountId, detail: result });
+        return json(res, 200, result);
+      }
+      if (seg[3] === 'import' && seg[4] === 'bulk' && method === 'POST') {
+        const body = await readJson(req);
+        if (!body.json) return json(res, 400, { error: 'json required' });
+        try {
+          const result = handlers.importBulk(services, accountId, String(body.json));
+          sessionService.audit('bulk_imported', { accountId, detail: result });
+          return json(res, 200, result);
+        } catch (e) {
+          return json(res, 400, { error: String((e as Error).message) });
+        }
       }
 
       // ── PRIVACY GATE (spec §45): everything below reads this profile's
@@ -282,37 +314,6 @@ export function createArchiveServer(opts: ArchiveServerOptions): Server {
           return void res.end(out.content);
         } catch (e) {
           return json(res, 404, { error: String((e as Error).message) });
-        }
-      }
-      // Preview a WhatsApp export .txt (detected senders + count).
-      if (seg[3] === 'import' && seg[4] === 'preview' && method === 'POST') {
-        const body = await readJson(req);
-        return json(res, 200, handlers.importPreview(String(body.text ?? '')));
-      }
-      // Import a WhatsApp export .txt into a chat (spec §71 full history).
-      if (seg[3] === 'import' && !seg[4] && method === 'POST') {
-        const body = await readJson(req);
-        if (!body.chatId || !body.text) return json(res, 400, { error: 'chatId and text required' });
-        const result = handlers.importChat(
-          services,
-          accountId,
-          String(body.chatId),
-          String(body.text),
-          body.myName ? String(body.myName) : null,
-        );
-        sessionService.audit('chat_imported', { accountId, detail: result });
-        return json(res, 200, result);
-      }
-      // Bulk import from whatsapp-chat-exporter JSON (all chats at once).
-      if (seg[3] === 'import' && seg[4] === 'bulk' && method === 'POST') {
-        const body = await readJson(req);
-        if (!body.json) return json(res, 400, { error: 'json required' });
-        try {
-          const result = handlers.importBulk(services, accountId, String(body.json));
-          sessionService.audit('bulk_imported', { accountId, detail: result });
-          return json(res, 200, result);
-        } catch (e) {
-          return json(res, 400, { error: String((e as Error).message) });
         }
       }
       return json(res, 404, { error: 'unknown account endpoint' });

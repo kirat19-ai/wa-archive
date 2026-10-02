@@ -66,8 +66,8 @@ export function ImportChatModal({ accountId, chats, onClose, onDone }: Props) {
       setSenders(pv.senders);
       setCount(pv.count);
       setMyName(pv.senders[0] ?? '');
-    } catch {
-      setError('Could not read that file.');
+    } catch (e) {
+      setError(`Could not read that file: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -85,8 +85,8 @@ export function ImportChatModal({ accountId, chats, onClose, onDone }: Props) {
         setResult(`Imported ${r.imported} new message${r.imported === 1 ? '' : 's'} (of ${r.total}).`);
       }
       onDone();
-    } catch {
-      setError('Import failed.');
+    } catch (e) {
+      setError(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
